@@ -15,8 +15,9 @@ Assistant, in de ruimte die je het geeft.
 ## Instellen
 
 1. Open in Tessera **Plugins**, kies **Spraakassistent** en vink je schermen aan. Voeg voor elke nieuwe installatie
-   zelf minstens één wekmodel toe: een optioneel catalogusmodel of een compatibele openbare microWakeWord-JSON-URL.
-   Er is niets vooraf geselecteerd. De installatie bouwt één keer met alleen je gekozen modellen.
+   zelf minstens één wekmodel toe: een optioneel catalogusmodel, een compatibele openbare microWakeWord-JSON-URL
+   of een privé JSON- en TFLite-bestandspaar via **Add from computer**. Er is niets vooraf geselecteerd.
+   De installatie bouwt één keer met alleen je gekozen modellen. Bestandsimport vereist een Tessera-app met die knop.
 2. Open in Home Assistant het apparaat van het scherm (Instellingen, Apparaten) en kies bij **Assist-pijplijn** de
    pijplijn, als het niet de voorkeurspijplijn is.
 3. Zet de tegel **Assistent** op een pagina: hij zegt wat de assistent doet, en een tik stelt een vraag zonder wekzin,
@@ -50,11 +51,14 @@ de aanvraag en annuleert een gepland wekgeluid. Microfoon dempen en de gekozen W
 
 ## Wekmodellen beheren
 
-Voeg in de bouwinstellingen van de plugin catalogusmodellen of openbare HTTPS-JSON-manifest-URL's toe, of verwijder
-modellen. Pas de lijst daarna toe om het scherm bij te werken. Conceptwijzigingen downloaden of installeren niets.
+Voeg in de bouwinstellingen catalogusmodellen of openbare HTTPS-JSON-manifest-URL's toe, of verwijder modellen.
+Gebruik voor een privémodel **Add from computer** met het JSON-manifest en bijbehorende TFLite-bestand. Uploaden
+controleert en bewaart de bestanden in Home Assistant en voegt een concept toe, zonder installatie. Pas daarna de
+hele lijst één keer toe om het scherm bij te werken. URL-modellen worden pas bij toepassen gedownload.
 Okay Nabu, Hey Jarvis (Engels) en Hey Mycroft zijn optionele catalogusmodellen, niet automatisch geïnstalleerd.
-Andere compatibele modellen, zoals Алиса, voeg je met hetzelfde URL-veld toe. Hun echte frontend-timing moet met
-de 10ms-eis van de plugin en VAD overeenkomen; metadata veranderen maakt een incompatibel model niet geschikt.
+De echte frontend-timing van elk model moet met de 10ms-eis van de plugin en VAD overeenkomen; metadata veranderen
+maakt een incompatibel model niet geschikt. Privémodellen worden niet gepubliceerd, maar geëxporteerde
+schermbestanden en gebouwde firmware bevatten ze wel. Deel die bestanden daarom niet openbaar.
 
 Gewone upgrades bewaren de geïnstalleerde lijst. Na installatie mag je alle modellen verwijderen voor
 **Alleen handmatig activeren**; de tegel en **Nu vragen** blijven werken. Het losse ESPHome-pakket is ook standaard

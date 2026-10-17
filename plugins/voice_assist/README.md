@@ -15,8 +15,9 @@ voice satellite in Home Assistant, in the area you give it.
 ## Set up
 
 1. In Tessera, open **Plugins**, choose **Voice assistant** and tick your screens. Explicitly add at least one wake
-   model for each new installation: an optional catalogue preset or a compatible public microWakeWord JSON URL.
-   No model is preselected. Install builds once with only your chosen set.
+   model for each new installation: an optional catalogue preset, a compatible public microWakeWord JSON URL, or
+   a private JSON and TFLite file pair through **Add from computer**. No model is preselected. Install builds once
+   with only your chosen set. File import requires a Tessera app that offers this control.
 2. In Home Assistant, open the screen's device (Settings, Devices) and choose its Assist pipeline under
    **Assist pipeline**, if it is not the preferred one.
 3. Put the tile **Assistant** on a page: it says what the assistant does, and a tap asks a question without the wake
@@ -50,11 +51,14 @@ request and cancels a pending cue. Microphone mute and the selected Wake phrase 
 
 ## Manage wake models
 
-In the plugin's build settings, add or remove catalogue models or public HTTPS JSON manifest URLs, then choose
-**Apply and update screen**. Editing the draft never downloads or installs a model. Okay Nabu, Hey Jarvis (English)
-and Hey Mycroft are optional catalogue presets, not automatically installed models. Other compatible models, such
-as Алиса, use the same URL field. Their actual frontend timing must match the plugin's 10ms requirement and VAD;
-changing metadata does not make an incompatible model work.
+In the plugin's build settings, add or remove catalogue models or public HTTPS JSON manifest URLs. For a private
+model, use **Add from computer** and choose its JSON manifest and matching TFLite file. Upload validates and stores
+the pair in Home Assistant and adds a draft; it does not install it. Choose **Apply and update screen** once for
+the whole list. URL models are downloaded only on Apply.
+Okay Nabu, Hey Jarvis (English) and Hey Mycroft are optional catalogue presets, not automatically installed models.
+Their actual frontend timing, and that of any imported model, must match the plugin's 10ms requirement and VAD;
+changing metadata does not make an incompatible model work. Private models are not published, but screen-file
+exports and compiled firmware contain them, so do not share those files publicly.
 
 Ordinary upgrades preserve the installed set. After installation, removing all models is allowed: **Manual activation
 only** keeps the tile and **Ask now** usable. The standalone ESPHome package also defaults to manual-only.

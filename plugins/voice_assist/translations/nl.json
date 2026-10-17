@@ -35,7 +35,7 @@
   "setting_thinking_sound": "Denkgeluid",
   "setting_thinking_sound_hint": "Een zacht geluid, steeds opnieuw, zolang Home Assistant het antwoord bedenkt.",
   "build_wake_models": "Wekmodellen",
-  "build_wake_models_hint": "Kies minstens één model voor de eerste installatie. Voeg optionele catalogusmodellen of een openbare compatibele microWakeWord-JSON-URL toe en werk het scherm één keer bij. Later kun je alle modellen verwijderen voor alleen handmatige activering.",
+  "build_wake_models_hint": "Kies minstens één model voor de eerste installatie. Voeg optionele modellen, een openbare microWakeWord-JSON-URL of een privé JSON- en TFLite-bestandspaar van je computer toe en werk het scherm één keer bij. Later kun je alle modellen verwijderen voor alleen handmatige activering.",
   "model_okay_nabu": "Okay Nabu",
   "model_hey_jarvis": "Hey Jarvis",
   "model_hey_mycroft": "Hey Mycroft"

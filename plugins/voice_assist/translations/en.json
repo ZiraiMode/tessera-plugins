@@ -35,7 +35,7 @@
   "setting_thinking_sound": "Thinking sound",
   "setting_thinking_sound_hint": "A soft sound, again and again, while Home Assistant works out the answer.",
   "build_wake_models": "Wake models",
-  "build_wake_models_hint": "Choose at least one model for the first installation. Add optional catalogue presets or a public compatible microWakeWord JSON URL, then apply once to update the screen. Later, removing all models keeps manual activation.",
+  "build_wake_models_hint": "Choose at least one model for the first installation. Add optional presets, a public microWakeWord JSON URL, or a private JSON and TFLite pair from your computer, then apply once to update the screen. Later, removing all models keeps manual activation.",
   "model_okay_nabu": "Okay Nabu",
   "model_hey_jarvis": "Hey Jarvis",
   "model_hey_mycroft": "Hey Mycroft"

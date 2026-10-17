@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.5 - 2026-10-17
+- Finish the wake sound before recording, for both taps and wake phrases, and cancel pending starts safely.
+- Pause wake detection through the native request and spoken reply, then resume without toggling Wake word.
+- Drain local sounds on errors, cancellation and disconnect; keep native follow-up conversations uninterrupted.
+
 ## 0.2.4 - 2026-10-17
 - GUI-managed compatible microWakeWord models, optional catalogue presets and public JSON URLs. First installation
   requires an explicit choice; later an empty list allows manual-only activation.

@@ -25,13 +25,13 @@ class VoiceAssist : public Component, public tessera::Plugin {
   void loop() override;
   float get_setup_priority() const override { return setup_priority::LATE; }
   bool settings(tessera::SettingsPage &page) override;
-  void before_update() override { stop(); }
+  void before_update() override;
 
   void set_assistant(voice_assistant::VoiceAssistant *a) { assistant_ = a; }
   void set_wake_word(micro_wake_word::MicroWakeWord *w) { wake_word_ = w; }
   void set_wake_word_on(switch_::Switch *s) { wake_word_on_ = s; }
   void set_wake_phrase(WakePhraseSelect *s) { wake_phrase_ = s; }
-  void set_speaker(speaker::Speaker *s) { sounds_.set_speaker(s); }
+  void set_speaker(speaker::Speaker *s) { speaker_ = s; sounds_.set_speaker(s); }
   void set_wake_sound_on(switch_::Switch *s) { wake_sound_on_ = s; }
   void set_thinking_sound_on(switch_::Switch *s) { thinking_sound_on_ = s; }
   void set_wake_sound(tessera::Sound s) { wake_sound_ = s; }
@@ -44,11 +44,12 @@ class VoiceAssist : public Component, public tessera::Plugin {
   void failed(const std::string &code, const std::string &message);
   void sync_wake();
   bool accepts_wake_word(const std::string &word) const;
+  void wake(const std::string &word);
 
   // A tap on the tile, or Ask on the settings page: ask now, or stop what runs.
   void ask();
   void stop();
-  bool busy() const { return assistant_ != nullptr && assistant_->is_running(); }
+  bool busy() const { return request_ != Request::NONE || (assistant_ != nullptr && assistant_->is_running()); }
 
   // What the tile and the top bar show.
   Phase current() const { return phase_; }
@@ -65,6 +66,7 @@ class VoiceAssist : public Component, public tessera::Plugin {
   bool showing_failure() const { return phase_ == Phase::FAILED && reply_fresh(); }
 
  protected:
+  enum class Request : uint8_t { NONE, STOPPING_WAKE, BEEP };
   voice_assistant::VoiceAssistant *assistant_{};
   micro_wake_word::MicroWakeWord *wake_word_{};
   switch_::Switch *wake_word_on_{};
@@ -72,10 +74,22 @@ class VoiceAssist : public Component, public tessera::Plugin {
   bool setup_complete_{false};
   switch_::Switch *wake_sound_on_{}, *thinking_sound_on_{};
   tessera::Sound wake_sound_, thinking_sound_;
+  speaker::Speaker *speaker_{};
   tessera::SoundPlayer sounds_;
+  Request request_{Request::NONE};
+  // Empty for a manual request; model identity and selection remain owned by WakePhraseSelect.
+  std::string request_word_;
+  bool sound_active_{false}, sound_finishing_{false}, stopping_{false};
+  bool thinking_allowed_{false};
+  // Native start() is queued while still STOPPED; a stop there cannot cancel it.
+  bool wake_start_pending_{false}, wake_stop_pending_{false}, wake_stop_sent_{false};
 
-  // Starts to listen: the wake sound, once, when it was not listening yet.
-  void listening_();
+  bool wake_eligible_() const;
+  void begin_request_(const std::string &word);
+  void advance_request_();
+  void cancel_request_();
+  void stop_sound_();
+  void loop_sound_();
 
   Phase phase_{Phase::IDLE};
   std::string heard_, answer_;

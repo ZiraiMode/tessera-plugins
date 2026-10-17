@@ -14,6 +14,10 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 COMPONENT = ROOT / "plugins/voice_assist/components/voice_assist"
+CORE = Path(os.environ.get(
+    "TESSERA_CORE",
+    "/home/p1ng2win/orca/workspaces/homeassistant_espscreen/Waveshare-ESP32-S3-Touch-LCD-4B",
+))
 
 STUBS = {
     "esphome/core/component.h": r'''
@@ -27,6 +31,7 @@ STUBS = {
 #include <algorithm>
 #define ESP_LOGW(...)
 namespace esphome { template<class T> using optional = std::optional<T>;
+inline std::vector<std::string> trace;
 namespace setup_priority { constexpr float DATA=600, LATE=-100; }
 class Component { public: virtual void setup() {} virtual void loop() {} virtual float get_setup_priority() const {return 0;} }; }
 ''',
@@ -99,7 +104,19 @@ class WakeWordModel {public:std::string id,word; bool enabled=true; int writes=0
     "esphome/components/micro_wake_word/micro_wake_word.h": r'''
 #pragma once
 #include "streaming_model.h"
-namespace esphome::micro_wake_word {class MicroWakeWord {public:bool running=false;void start(){running=true;}void stop(){running=false;}};}
+// Native boundary: start is queued in STOPPED, where stop deliberately does not cancel it.
+namespace esphome::micro_wake_word {class MicroWakeWord {public:
+ int state=0, starts=0, stops=0, redundant_starts=0;bool pending_start=false,pending_stop=false,ready=true,failed=false;
+ bool is_running()const{return state!=0;}bool is_ready()const{return ready;}bool is_failed()const{return failed;}
+ void start(){if(!ready||failed)return;if(is_running()){++redundant_starts;return;}++starts;pending_start=true;pending_stop=false;}
+ void stop(){if(state==0)return;++stops;pending_start=false;pending_stop=true;}
+ void step(){
+  if(pending_start&&state==0){state=1;pending_start=false;return;}
+  if(state==1)state=2;
+  if(pending_stop&&state==2){state=3;pending_stop=false;return;}
+  if(state==3){state=0;trace.emplace_back("wake-stopped");}
+ }
+};}
 ''',
     "esphome/components/switch/switch.h": r'''
 #pragma once
@@ -107,19 +124,52 @@ namespace esphome::switch_ {class Switch {public:bool state=true;void turn_on(){
 ''',
     "esphome/components/voice_assistant/voice_assistant.h": r'''
 #pragma once
-namespace esphome::voice_assistant {class VoiceAssistant {public:void *client=nullptr;bool running=false;
- void *get_api_connection()const{return client;} bool is_running()const{return running;}
- void request_stop(){running=false;}void request_start(bool,bool){running=true;}};}
+#include "esphome/core/component.h"
+namespace esphome::voice_assistant {class VoiceAssistant {public:
+ void *client=nullptr;bool running=false,stop_requested=false;int starts=0,stops=0;std::string wake_word;
+ void *get_api_connection()const{return client;}bool is_running()const{return running;}
+ void set_wake_word(const std::string &word){wake_word=word;}
+ void request_stop(){++stops;stop_requested=true;} // Native stop is asynchronous, especially during TTS.
+ void request_start(bool continuous,bool silence){if(client&&!running){++starts;running=true;stop_requested=false;trace.emplace_back("capture");}}
+};}
 ''',
     "esphome/core/hal.h": r'''
 #pragma once
 #include <cstdint>
-inline uint32_t millis(){return 1;}
+namespace esphome {inline uint32_t now=1;inline uint32_t millis(){return now;}}
 ''',
-    "esphome/components/smart_display/plugin_sound.h": r'''
+    "esphome/core/defines.h": r'''
 #pragma once
-namespace esphome::speaker {class Speaker {};}
-namespace tessera {struct Sound {}; class SoundPlayer {public:void set_speaker(esphome::speaker::Speaker*){}bool playing(){return false;}bool playing(Sound){return false;}void play(Sound){}void stop(){}void loop(){}};}
+#define USE_SPEAKER
+''',
+    "esphome/components/audio/audio.h": r'''
+#pragma once
+namespace esphome::audio {struct AudioStreamInfo {AudioStreamInfo(int,int,int){}};}
+''',
+    "esphome/components/speaker/speaker.h": r'''
+#pragma once
+#include "esphome/core/component.h"
+#include "esphome/components/audio/audio.h"
+namespace esphome::speaker {class Speaker {public:
+ bool running=false,pending=false,finishing=false;size_t buffered=0,submitted=0,quota=2;
+ int finishes=0,plays=0;
+ void set_audio_stream_info(audio::AudioStreamInfo){}
+ size_t play(const uint8_t*,size_t length,int){
+  ++plays;
+  if(!running){pending=true;return 0;}
+  size_t taken=std::min(quota,length);buffered+=taken;submitted+=taken;
+  if(taken)trace.emplace_back("samples");
+  return taken;
+ }
+ void finish(){++finishes;finishing=true;trace.emplace_back("finish");}
+ bool is_stopped()const{return !running;}
+ void step(bool drain=true){
+  if(finishing&&!running){pending=false;finishing=false;return;}
+  if(pending){pending=false;running=true;}
+  if(running&&drain)buffered=0;
+  if(running&&finishing&&buffered==0){running=false;finishing=false;trace.emplace_back("speaker-stopped");}
+ }
+};}
 ''',
     "esphome/components/smart_display/plugin_api.h": r'''
 #pragma once
@@ -193,29 +243,202 @@ int main(){
  reset();save(NEW_KEY,WakeSelection{});WakePhraseSelect none;init(none,reordered,3);
  micro_wake_word::MicroWakeWord detector;voice_assistant::VoiceAssistant assistant;switch_::Switch on;
  VoiceAssist plugin;plugin.set_assistant(&assistant);plugin.set_wake_word(&detector);plugin.set_wake_word_on(&on);plugin.set_wake_phrase(&none);
- assistant.client=&assistant;plugin.sync_wake();assert(!detector.running);plugin.setup();assert(!detector.running);
- on.state=false;plugin.sync_wake();on.state=true;plugin.sync_wake();assert(!detector.running);
- assistant.client=nullptr;plugin.sync_wake();assistant.client=&assistant;plugin.sync_wake();assert(!detector.running);
- plugin.ask();assert(assistant.running);assert(!plugin.accepts_wake_word("Hey Jarvis"));assistant.request_stop();
- none.make_call().set_index(1).perform();assert(detector.running);assert(plugin.accepts_wake_word("Hey Jarvis"));assert(!plugin.accepts_wake_word("Алиса"));
- assistant.client=nullptr;plugin.sync_wake();assert(!detector.running);assert(!plugin.accepts_wake_word("Hey Jarvis"));
- assistant.client=&assistant;on.state=false;plugin.sync_wake();assert(!detector.running);on.state=true;plugin.sync_wake();assert(detector.running);
+ assistant.client=&assistant;plugin.sync_wake();assert(!detector.is_running());plugin.setup();assert(!detector.is_running());
+ on.state=false;plugin.sync_wake();on.state=true;plugin.sync_wake();assert(!detector.is_running());
+ assistant.client=nullptr;plugin.sync_wake();assistant.client=&assistant;plugin.sync_wake();assert(!detector.is_running());
+ plugin.ask();assert(plugin.busy()&&!assistant.running);plugin.loop();assert(assistant.running);assert(!plugin.accepts_wake_word("Hey Jarvis"));
+ assistant.running=false;plugin.loop();
+ none.make_call().set_index(1).perform();assert(detector.pending_start);detector.step();detector.step();plugin.loop();
+ assert(detector.is_running());assert(plugin.accepts_wake_word("Hey Jarvis"));assert(!plugin.accepts_wake_word("Алиса"));
+ assistant.client=nullptr;plugin.sync_wake();detector.step();detector.step();plugin.loop();assert(!detector.is_running());assert(!plugin.accepts_wake_word("Hey Jarvis"));
+ assistant.client=&assistant;on.state=false;plugin.sync_wake();assert(!detector.is_running());on.state=true;plugin.sync_wake();detector.step();detector.step();plugin.loop();assert(detector.is_running());
  // DATA selection was restored before LATE plugin setup: explicit setup sync must start it.
- micro_wake_word::MicroWakeWord detector2;VoiceAssist startup;startup.set_assistant(&assistant);startup.set_wake_word(&detector2);startup.set_wake_word_on(&on);startup.set_wake_phrase(&none);startup.setup();assert(detector2.running);
+ micro_wake_word::MicroWakeWord detector2;VoiceAssist startup;startup.set_assistant(&assistant);startup.set_wake_word(&detector2);startup.set_wake_word_on(&on);startup.set_wake_phrase(&none);startup.setup();assert(detector2.pending_start);
+}
+'''
+
+
+LIFECYCLE_HARNESS = r'''
+#include "voice_assist.h"
+#include "esphome/components/esp32/preferences.h"
+#include "esphome/core/hal.h"
+#include <cassert>
+using namespace esphome;
+using namespace esphome::voice_assist;
+esp32::ESP32Preferences manager;
+struct Fixture {
+ micro_wake_word::WakeWordModel alisa{"ww_alisa","Алиса"},jarvis{"va_hey_jarvis","Hey Jarvis"};
+ WakeModelEntry models[2]{{&alisa,{1},"Алиса"},{&jarvis,{2},"Hey Jarvis"}};
+ WakePhraseSelect selection;
+ micro_wake_word::MicroWakeWord detector;
+ voice_assistant::VoiceAssistant assistant;
+ speaker::Speaker output;
+ switch_::Switch wake_on,sound_on,thinking_on;
+ VoiceAssist plugin;
+ uint8_t beep_bytes[6]{},thinking_bytes[8]{};
+ Fixture(bool sound=true,bool selected=true,bool settle=true) {
+  storage.clear();global_preferences=&manager;now=1;
+  if(!selected){WakeSelection none{};ESPPreferenceObject{42^0x56415001}.save(&none);}
+  selection.set_models(models,2);selection.options={"Алиса","Hey Jarvis"};selection.setup();
+  assistant.client=&assistant;sound_on.state=sound;
+  plugin.set_assistant(&assistant);plugin.set_wake_word(&detector);plugin.set_wake_word_on(&wake_on);
+  plugin.set_wake_phrase(&selection);plugin.set_speaker(&output);plugin.set_wake_sound_on(&sound_on);
+  plugin.set_thinking_sound_on(&thinking_on);
+  plugin.set_wake_sound(tessera::Sound{beep_bytes,sizeof(beep_bytes),16000,1});
+  plugin.set_thinking_sound(tessera::Sound{thinking_bytes,sizeof(thinking_bytes),16000,1});
+  plugin.setup();if(settle)pump(4);trace.clear();
+ }
+ void tick(bool drain=true){now+=10;detector.step();output.step(drain);plugin.loop();}
+ void pump(int count,bool drain=true){for(int i=0;i<count;++i)tick(drain);}
+ void await_start(bool drain=true){for(int i=0;i<30&&!assistant.running;++i)tick(drain);assert(assistant.running);}
+ void await_beep(){for(int i=0;i<30&&output.submitted<sizeof(beep_bytes);++i)tick(false);assert(output.submitted==sizeof(beep_bytes));}
+};
+size_t event(const char *name){auto it=std::find(trace.begin(),trace.end(),name);assert(it!=trace.end());return it-trace.begin();}
+int main(){
+ // Production SoundPlayer feeds partial writes; its final submission must not start capture.
+ {
+  Fixture f;assert(f.detector.is_running());f.plugin.wake("Алиса");assert(f.plugin.busy());
+  f.plugin.wake("Алиса");f.plugin.wake("Hey Jarvis");assert(!f.plugin.accepts_wake_word("Алиса"));
+  f.await_beep();assert(f.assistant.starts==0&&f.output.finishes==1&&f.output.buffered==6);
+  f.pump(3,false);assert(f.assistant.starts==0); // All bytes accepted, still physically draining.
+  f.tick();assert(f.assistant.starts==1&&f.assistant.wake_word=="Алиса");
+  assert(event("wake-stopped")<event("samples"));assert(event("samples")<event("finish"));
+  assert(event("finish")<event("speaker-stopped"));assert(event("speaker-stopped")<event("capture"));
+  int plays=f.output.plays;f.plugin.phase(Phase::LISTENING);f.pump(8);
+  assert(f.output.plays==plays&&f.assistant.starts==1&&!f.detector.is_running());
+ }
+ // Sound off adds no speaker work, and a manual request clears the native wake-word field.
+ {
+  Fixture f(false);f.assistant.wake_word="previous wake";f.plugin.ask();f.await_start();
+  assert(f.assistant.wake_word.empty()&&f.output.plays==0&&f.output.finishes==0);
+  f.assistant.running=false;f.pump(5);assert(f.detector.is_running());
+  f.plugin.wake("Алиса");f.await_start();assert(f.assistant.starts==2&&f.assistant.wake_word=="Алиса");
+  f.assistant.running=false;f.pump(5);f.plugin.ask();f.await_start();
+  assert(f.assistant.starts==3&&f.assistant.wake_word.empty());
+  assert(f.output.plays==0&&f.output.finishes==0);
+ }
+ // Every cancellation point (wake shutdown, feeding, drain) forbids a delayed native start.
+ for(int reason=0;reason<6;++reason)for(int point=0;point<3;++point){
+  Fixture f;f.plugin.wake("Алиса");
+  if(point==1){for(int i=0;i<20&&f.output.submitted==0;++i)f.tick(false);assert(f.output.submitted>0);}
+  if(point==2)f.await_beep();
+  if(reason==0)f.plugin.ask(); // A second tap cancels the pending request, not queues another.
+  if(reason==1){f.assistant.client=nullptr;f.plugin.stop();f.plugin.sync_wake();}
+  if(reason==2){f.wake_on.state=false;f.plugin.sync_wake();}
+  if(reason==3)f.selection.make_call().set_index(1).perform();
+  if(reason==4)f.plugin.before_update();
+  if(reason==5)f.assistant.client=nullptr; // Also rechecked without relying on YAML delivery.
+  f.pump(30);assert(f.assistant.starts==0&&!f.plugin.busy()&&f.detector.redundant_starts==0);
+  if(reason==1||reason==2||reason==4||reason==5)assert(!f.detector.is_running()&&!f.detector.pending_start);
+ }
+ // Model/switch changes only cancel wake-origin requests; tap remains available.
+ {
+  Fixture f;f.plugin.ask();f.await_beep();f.selection.make_call().set_index(1).perform();
+  f.wake_on.state=false;f.plugin.sync_wake();f.await_start();
+  assert(f.assistant.wake_word.empty()&&f.assistant.starts==1);
+ }
+ // Changing model identity cancels even when the two native wake phrases happen to be identical.
+ {
+  Fixture f;f.jarvis.word="Алиса";f.plugin.wake("Алиса");f.await_beep();
+  f.selection.make_call().set_index(1).perform();f.pump(20);assert(f.assistant.starts==0);
+ }
+ // No selected model: connect/toggles cannot start inference, but a tap still works.
+ {
+  Fixture f(false,false);assert(!f.detector.is_running()&&f.detector.starts==0);
+  f.assistant.client=nullptr;f.plugin.stop();f.assistant.client=&f.assistant;
+  f.wake_on.state=false;f.plugin.sync_wake();f.wake_on.state=true;f.plugin.sync_wake();f.pump(5);
+  assert(f.detector.starts==0);f.plugin.ask();f.await_start();assert(f.assistant.wake_word.empty());
+  f.assistant.running=false;f.pump(5);assert(f.detector.starts==0);
+ }
+ // on_end is HA pipeline end, not native playback end. Follow-up conversations remain native.
+ {
+  Fixture f(false);f.plugin.ask();f.await_start();f.plugin.phase(Phase::LISTENING);
+  f.plugin.phase(Phase::THINKING);f.pump(2,false);assert(f.output.submitted>0);
+  int plays=f.output.plays;f.plugin.answer("response");assert(f.output.finishes==1);
+  f.plugin.phase(Phase::IDLE);f.pump(5,false);
+  f.plugin.phase(Phase::THINKING); // A late VAD event cannot reopen the completed pipeline's feeder.
+  assert(f.plugin.busy()&&!f.detector.is_running()&&f.output.plays==plays);
+  f.pump(5);assert(!f.detector.is_running()); // Local sound idle does not imply native idle.
+  f.plugin.phase(Phase::LISTENING);f.pump(3); // Native continues directly into another capture.
+  assert(f.assistant.starts==1&&!f.detector.is_running()&&f.plugin.busy());
+  f.plugin.phase(Phase::IDLE);f.assistant.running=false;f.pump(6);
+  assert(f.detector.is_running()&&f.detector.redundant_starts==0);
+ }
+ // Failure, cancel, and no-TTS "nevermind": all stop the thinking feeder and recover repeatedly.
+ {
+  Fixture f(false);
+  for(int outcome=0;outcome<6;++outcome){
+   assert(f.detector.is_running());f.plugin.wake("Алиса");f.await_start();
+   f.plugin.phase(Phase::LISTENING);f.plugin.phase(Phase::THINKING);
+   size_t before=f.output.submitted;for(int i=0;i<10&&f.output.submitted==before;++i)f.tick(false);
+   assert(f.output.submitted>before);int plays=f.output.plays;
+   if(outcome%3==0){f.plugin.failed("stt-failed","No text");f.plugin.phase(Phase::IDLE);}
+   if(outcome%3==1){
+    f.plugin.ask();assert(f.assistant.stop_requested);
+    f.plugin.phase(Phase::THINKING); // Deferred VAD callback must not restart a cancelled feeder.
+   }
+   if(outcome%3==2)f.plugin.phase(Phase::IDLE);
+   f.plugin.phase(Phase::THINKING); // Failure/end are also terminal until the next actual listening turn.
+   f.pump(5);assert(f.output.plays==plays&&!f.detector.is_running());
+   f.assistant.running=false;f.pump(6);
+   assert(f.detector.is_running()&&!f.output.running&&f.detector.redundant_starts==0);
+   assert(f.assistant.starts==outcome+1);
+  }
+ }
+ // Firmware update cancellation also holds wake inference off after an active request becomes idle.
+ {
+  Fixture f(false);f.plugin.ask();f.await_start();f.plugin.phase(Phase::THINKING);f.pump(2,false);
+  f.plugin.before_update();int plays=f.output.plays;assert(f.assistant.stop_requested);
+  f.plugin.phase(Phase::THINKING);f.assistant.running=false;f.pump(10);
+  assert(f.output.plays==plays&&!f.detector.is_running()&&!f.detector.pending_start&&!f.plugin.busy());
+ }
+ // Native idle without any HA end callback is also enough to stop thinking and restore wake.
+ {
+  Fixture f(false);f.plugin.ask();f.await_start();f.plugin.phase(Phase::THINKING);f.pump(2,false);
+  int plays=f.output.plays;f.assistant.running=false;f.pump(8);
+  assert(f.output.plays==plays&&f.detector.is_running()&&f.plugin.current()==Phase::IDLE);
+ }
+ // Native MWW start() queues work while is_running()==false; stop() there is a no-op.
+ {
+  Fixture f(true,true,false);assert(f.detector.pending_start&&!f.detector.is_running());
+  f.wake_on.state=false;f.plugin.sync_wake();f.plugin.sync_wake();
+  assert(f.detector.stops==0);f.pump(6);
+  assert(!f.detector.is_running()&&!f.detector.pending_start&&f.detector.stops==1);
+  f.wake_on.state=true;for(int i=0;i<10;++i)f.plugin.sync_wake();assert(f.detector.starts==2);
+  f.assistant.client=nullptr;f.plugin.stop();f.pump(6);
+  assert(!f.detector.is_running()&&!f.detector.pending_start&&f.detector.stops==2);
+  f.assistant.client=&f.assistant;f.plugin.sync_wake();f.pump(6);
+  assert(f.detector.is_running()&&f.detector.starts==3&&f.detector.redundant_starts==0);
+ }
+ {
+  Fixture f(true,true,false);f.plugin.ask();f.plugin.loop();
+  assert(f.output.plays==0&&f.assistant.starts==0); // Must not mistake queued MWW start for stopped task.
+  f.await_beep();assert(f.assistant.starts==0);f.await_start();assert(f.assistant.starts==1);
+ }
+ // SoundPlayer's real no-progress timeout still finishes its queued speaker and releases capture.
+ {
+  Fixture f;f.output.quota=0;f.plugin.ask();
+  for(int i=0;i<140&&!f.assistant.running;++i)f.tick();
+  assert(f.assistant.starts==1&&f.output.submitted==0&&f.output.finishes==1&&!f.output.pending);
+ }
 }
 '''
 
 
 class ProductionFirmwareTests(unittest.TestCase):
-    def test_production_select_and_assistant(self):
+    def compile_and_run(self, harness):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             for path, content in STUBS.items():
                 target = root / path
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_text(content)
+            sound_header = CORE / "components/smart_display/plugin_sound.h"
+            self.assertTrue(sound_header.is_file(), f"Production SoundPlayer required: {sound_header}; set TESSERA_CORE")
+            target = root / "esphome/components/smart_display/plugin_sound.h"
+            target.write_text(sound_header.read_text())
             source = root / "harness.cpp"
-            source.write_text(HARNESS)
+            source.write_text(harness)
             executable = root / "harness"
             result = subprocess.run(["g++", "-std=c++20", "-I", str(root), "-I", str(COMPONENT),
                                      str(source), str(COMPONENT / "wake_phrase_select.cpp"),
@@ -224,6 +447,12 @@ class ProductionFirmwareTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             result = subprocess.run([str(executable)], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_production_select_and_assistant(self):
+        self.compile_and_run(HARNESS)
+
+    def test_production_request_audio_lifecycle(self):
+        self.compile_and_run(LIFECYCLE_HARNESS)
 
 
 def load_select():

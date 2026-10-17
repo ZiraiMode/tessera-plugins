@@ -38,6 +38,10 @@ De instellingen zijn ook entiteiten van het scherm in Home Assistant ("Wake word
 "Thinking sound"), en de editor toont ze in de details van de plugin op het tabblad Plugins van het scherm. De eigen schakelaar **Microfoon** van het
 scherm, op een bord dat er een heeft, zet hem ook voor de assistent uit.
 
+Het wekgeluid is afgelopen voordat de opname begint. Wekdetectie pauzeert tijdens een vraag of antwoord en hervat
+nadat de native assistent klaar is, niet zodra Home Assistant het antwoord heeft gemaakt. Een tweede tik tijdens
+het wekgeluid annuleert de geplande vraag.
+
 ## Wekmodellen beheren
 
 Voeg in de bouwinstellingen van de plugin catalogusmodellen of openbare HTTPS-JSON-manifest-URL's toe, of verwijder

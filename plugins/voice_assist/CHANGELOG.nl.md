@@ -1,5 +1,10 @@
 # Wijzigingen
 
+## 0.2.5 - 2026-10-17
+- Rond het wekgeluid af voor de opname, na een tik of wekzin, en annuleer geplande starts veilig.
+- Pauzeer wekdetectie tijdens de native vraag en het gesproken antwoord; hervat zonder Wekwoord om te schakelen.
+- Rond lokale geluiden af bij fouten, annuleren en verbreken; laat native vervolggesprekken doorlopen.
+
 ## 0.2.4 - 2026-10-17
 - Compatibele microWakeWord-modellen beheren via de GUI, met optionele catalogusmodellen en openbare JSON-URL's.
   De eerste installatie vereist een eigen keuze; later kan een lege lijst alleen handmatige activering gebruiken.

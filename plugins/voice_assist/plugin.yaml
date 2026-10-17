@@ -13,12 +13,8 @@ micro_wake_word:
   vad:
     model: https://raw.githubusercontent.com/esphome/micro-wake-word-models/40ff33f57f8fc6ad71a75ef085abbf742495b225/models/v2/vad.json
   on_wake_word_detected:
-    - if:
-        condition:
-          lambda: 'return id(va_plugin).accepts_wake_word(wake_word);'
-        then:
-          - voice_assistant.start:
-              wake_word: !lambda return wake_word;
+    # Tap and wake requests share shutdown -> optional drained beep -> native capture.
+    - lambda: 'id(va_plugin).wake(wake_word);'
 
 # Home Assistant's Assist pipeline: what the screen hears goes to Home Assistant, the answer comes back on the screen's
 # media player, which ducks music for it.
@@ -35,7 +31,7 @@ voice_assistant:
   on_client_connected:
     - lambda: 'id(va_plugin).sync_wake();'
   on_client_disconnected:
-    - lambda: 'id(va_assistant)->request_stop(); id(va_wake)->stop();'
+    - lambda: 'id(va_plugin).stop(); id(va_plugin).sync_wake();'
   on_listening:
     - lambda: 'id(va_plugin).phase(esphome::voice_assist::Phase::LISTENING);'
   on_stt_vad_end:
@@ -44,6 +40,7 @@ voice_assistant:
     - lambda: 'id(va_plugin).heard(x);'
   on_tts_start:
     - lambda: 'id(va_plugin).answer(x);'
+  # HA pipeline end can precede native announcement completion; the plugin waits for native idle.
   on_end:
     - lambda: 'id(va_plugin).phase(esphome::voice_assist::Phase::IDLE);'
   on_error:

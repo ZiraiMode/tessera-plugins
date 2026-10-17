@@ -38,6 +38,10 @@ The settings are entities of the screen in Home Assistant too ("Wake word", "Wak
 sound"), and the editor shows them in the plugin's details on the screen's Plugins tab. The screen's own **Microphone** switch, on a board that has one,
 silences it for the assistant as well.
 
+The wake sound finishes before recording starts. Wake detection pauses while a question or reply is active and
+resumes after the native assistant has finished, not merely when Home Assistant finishes generating its answer.
+A second tap during the wake sound cancels the pending question.
+
 ## Manage wake models
 
 In the plugin's build settings, add or remove catalogue models or public HTTPS JSON manifest URLs, then choose

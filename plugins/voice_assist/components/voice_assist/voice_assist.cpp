@@ -117,6 +117,8 @@ void VoiceAssist::setup() {
   });
   if (wake_phrase_ != nullptr) {
     wake_phrase_->add_on_state_callback([this](size_t) {
+      // Even two models with the same spoken phrase are distinct GUI choices.
+      if (request_ != Request::NONE && !request_word_.empty()) cancel_request_();
       tessera::refresh();
       sync_wake();
     });
@@ -152,23 +154,58 @@ bool VoiceAssist::settings(tessera::SettingsPage &page) {
 }
 
 void VoiceAssist::loop() {
-  // While Assist thinks: the thinking sound again as soon as the last one went to the speaker, so its own length sets
-  // the rhythm and nothing is cut off. The player hands the speaker what it takes, never waiting.
-  if (phase_ == Phase::THINKING && is_on(thinking_sound_on_) && !sounds_.playing()) sounds_.play(thinking_sound_);
-  sounds_.loop();
+  const bool running = assistant_ != nullptr && assistant_->is_running();
+  if (!running && request_ == Request::NONE) {
+    stopping_ = false;
+    thinking_allowed_ = false;
+    stop_sound_();
+    if (phase_ != Phase::IDLE && phase_ != Phase::FAILED) phase(Phase::IDLE);
+  }
+  // A native follow-up turn remains running: do not restart wake inference between turns.
+  if (running && !stopping_ && thinking_allowed_ && phase_ == Phase::THINKING &&
+      is_on(thinking_sound_on_) && !sound_active_) {
+    sounds_.play(thinking_sound_);
+    sound_active_ = sounds_.playing();
+  }
+  if (phase_ == Phase::THINKING && !is_on(thinking_sound_on_)) stop_sound_();
+  loop_sound_();
+  sync_wake();
+  advance_request_();
 }
 
-void VoiceAssist::listening_() {
-  if (phase_ != Phase::LISTENING && is_on(wake_sound_on_)) sounds_.play(wake_sound_);
+void VoiceAssist::stop_sound_() {
+  sounds_.stop();
+  if (sound_active_ && !sound_finishing_) {
+    // Stop producing samples, but drain only our own speaker input, not the native response.
+    speaker_->finish();
+    sound_finishing_ = true;
+  }
+}
+
+void VoiceAssist::loop_sound_() {
+  if (!sound_active_) return;
+  sounds_.loop();
+  if (sounds_.playing()) return;
+  if (!sound_finishing_) {
+    // Submission (including SoundPlayer's no-progress exit) is not playback completion.
+    speaker_->finish();
+    sound_finishing_ = true;
+    return;
+  }
+  // Check on a later loop: finish() must also cancel a speaker start still queued in STOPPED.
+  if (speaker_->is_stopped()) {
+    sound_active_ = false;
+    sound_finishing_ = false;
+  }
 }
 
 void VoiceAssist::phase(Phase p) {
-  if (p == Phase::LISTENING) listening_();
-  if (p == Phase::IDLE && phase_ == Phase::FAILED) {
-    // The pipeline ends after a failure too: the failure stays on the tile while it is fresh.
-  } else {
-    phase_ = p;
-  }
+  if (p != Phase::THINKING) stop_sound_();
+  if (stopping_ && (p == Phase::LISTENING || p == Phase::THINKING)) return;
+  if (p == Phase::THINKING && !thinking_allowed_) return;
+  if (p != Phase::THINKING) thinking_allowed_ = p == Phase::LISTENING;
+  // A failure stays visible after the pipeline ends.
+  if (p != Phase::IDLE || phase_ != Phase::FAILED) phase_ = p;
   if (p == Phase::LISTENING) {
     heard_.clear();
     answer_.clear();
@@ -183,7 +220,8 @@ void VoiceAssist::heard(const std::string &text) {
 
 void VoiceAssist::answer(const std::string &text) {
   // The answer is about to play on the same speaker: a plop that is still going stops here.
-  if (sounds_.playing(thinking_sound_)) sounds_.stop();
+  stop_sound_();
+  thinking_allowed_ = false;
   answer_ = text;
   answered_at_ = millis();
   phase_ = Phase::ANSWERING;
@@ -191,6 +229,7 @@ void VoiceAssist::answer(const std::string &text) {
 }
 
 void VoiceAssist::failed(const std::string &code, const std::string &message) {
+  cancel_request_();
   ESP_LOGW("voice_assist", "Assist failed: %s (%s)", code.c_str(), message.c_str());
   answer_ = message.empty() ? code : message;
   answered_at_ = millis();
@@ -198,38 +237,119 @@ void VoiceAssist::failed(const std::string &code, const std::string &message) {
   tessera::refresh();
 }
 
+bool VoiceAssist::wake_eligible_() const {
+  return setup_complete_ && assistant_ != nullptr && assistant_->get_api_connection() != nullptr &&
+         wake_word_on_ != nullptr && wake_word_on_->state &&
+         wake_phrase_ != nullptr && wake_phrase_->active_index().has_value();
+}
+
 void VoiceAssist::sync_wake() {
-  if (!setup_complete_ || wake_word_ == nullptr) return;
-  if (assistant_ != nullptr && assistant_->get_api_connection() != nullptr &&
-      wake_word_on_ != nullptr && wake_word_on_->state &&
-      wake_phrase_ != nullptr && wake_phrase_->active_index().has_value())
+  if (request_ != Request::NONE &&
+      (assistant_ == nullptr || assistant_->get_api_connection() == nullptr ||
+       (!request_word_.empty() && (!wake_eligible_() || !wake_phrase_->accepts(request_word_)))))
+    cancel_request_();
+  if (!setup_complete_ && !wake_start_pending_ && !wake_stop_pending_ &&
+      (wake_word_ == nullptr || !wake_word_->is_running())) return;
+  if (wake_word_ == nullptr) return;
+
+  const bool wanted = wake_eligible_() && !busy() && !sound_active_;
+  const bool running = wake_word_->is_running();
+  if (running) wake_start_pending_ = false;
+  if (!wanted && (running || wake_start_pending_)) wake_stop_pending_ = true;
+  if (wake_stop_pending_) {
+    if (running) {
+      if (!wake_stop_sent_) {
+        wake_word_->stop();
+        wake_stop_sent_ = true;
+      }
+      return;
+    }
+    // stop() in STOPPED ignores a queued start. Keep shutdown intent until it becomes visible.
+    if (wake_start_pending_) return;
+    wake_stop_pending_ = false;
+    wake_stop_sent_ = false;
+  }
+  if (wanted && !running && !wake_start_pending_ && wake_word_->is_ready() && !wake_word_->is_failed()) {
     wake_word_->start();
-  else
-    wake_word_->stop();
+    wake_start_pending_ = true;
+  }
 }
 
 bool VoiceAssist::accepts_wake_word(const std::string &word) const {
-  return setup_complete_ && assistant_ != nullptr && assistant_->get_api_connection() != nullptr &&
-         wake_word_on_ != nullptr && wake_word_on_->state &&
-         wake_phrase_ != nullptr && wake_phrase_->accepts(word);
+  return wake_eligible_() && !busy() && !sound_active_ && !wake_stop_pending_ && wake_phrase_->accepts(word);
 }
 
-void VoiceAssist::ask() {
-  if (assistant_ == nullptr) return;
-  if (busy()) {
-    assistant_->request_stop();
-    return;
-  }
-  listening_();
+void VoiceAssist::begin_request_(const std::string &word) {
+  request_word_ = word;
+  request_ = Request::STOPPING_WAKE;
+  stopping_ = false;
   phase_ = Phase::LISTENING;
   heard_.clear();
   answer_.clear();
-  assistant_->request_start(false, true);
+  sync_wake();
   tessera::refresh();
 }
 
+void VoiceAssist::advance_request_() {
+  if (request_ == Request::NONE) return;
+  if (request_ == Request::STOPPING_WAKE) {
+    if (wake_start_pending_ || wake_stop_pending_ || (wake_word_ != nullptr && wake_word_->is_running()) ||
+        sound_active_) return;
+    if (is_on(wake_sound_on_)) {
+      sounds_.play(wake_sound_);
+      sound_active_ = sounds_.playing();
+      if (sound_active_) {
+        request_ = Request::BEEP;
+        return;
+      }
+    }
+  }
+  if (sound_active_) return;
+  // Recheck immediately before capture; no queued request can survive disconnect or a changed wake choice.
+  if (assistant_ == nullptr || assistant_->get_api_connection() == nullptr || assistant_->is_running() ||
+      (!request_word_.empty() && (!wake_eligible_() || !wake_phrase_->accepts(request_word_)))) {
+    cancel_request_();
+    return;
+  }
+  assistant_->set_wake_word(request_word_);  // Empty on tap: do not reuse the previous detected phrase.
+  request_word_.clear();
+  request_ = Request::NONE;
+  assistant_->request_start(false, true);
+  thinking_allowed_ = assistant_->is_running();
+}
+
+void VoiceAssist::cancel_request_() {
+  request_ = Request::NONE;
+  request_word_.clear();
+  thinking_allowed_ = false;
+  stop_sound_();
+  if (phase_ != Phase::FAILED) phase_ = Phase::IDLE;
+}
+
+void VoiceAssist::wake(const std::string &word) {
+  if (accepts_wake_word(word)) begin_request_(word);
+}
+
+void VoiceAssist::ask() {
+  if (busy()) {
+    stop();
+    return;
+  }
+  if (setup_complete_ && assistant_ != nullptr && assistant_->get_api_connection() != nullptr)
+    begin_request_("");
+}
+
 void VoiceAssist::stop() {
-  if (busy()) assistant_->request_stop();
+  cancel_request_();
+  stopping_ = assistant_ != nullptr && assistant_->is_running();
+  if (stopping_) assistant_->request_stop();
+  sync_wake();
+  tessera::refresh();
+}
+
+void VoiceAssist::before_update() {
+  setup_complete_ = false;
+  stop();
 }
 
 bool VoiceAssist::reply_fresh() const {

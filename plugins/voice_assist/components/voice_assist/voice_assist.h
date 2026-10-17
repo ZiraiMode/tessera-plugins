@@ -13,8 +13,8 @@
 
 namespace esphome::voice_assist {
 
-// Where a question is: Home Assistant's Assist pipeline tells it through voice_assistant's triggers (plugin.yaml).
-enum class Phase : uint8_t { IDLE, LISTENING, THINKING, ANSWERING, FAILED };
+// Request preparation is local; native listening and Home Assistant's pipeline triggers report the later phases.
+enum class Phase : uint8_t { IDLE, PREPARING, LISTENING, THINKING, ANSWERING, FAILED };
 
 // The plugin: a tile that says what the assistant does and asks it on a tap, an item for the top bar while it is busy,
 // on the screen's settings page the wake word, the phrase it listens for, its two sounds and a row that asks now, and

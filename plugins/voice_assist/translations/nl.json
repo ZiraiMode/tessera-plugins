@@ -4,6 +4,7 @@
  },
  "screen": {
   "name": "Spraakassistent",
+  "preparing": "Bereidt voor…",
   "listening": "Luistert…",
   "thinking": "Denkt na…",
   "answering": "Antwoordt",

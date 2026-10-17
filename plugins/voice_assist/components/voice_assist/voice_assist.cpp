@@ -39,7 +39,8 @@ class AssistTile : public tessera::Tile {
 
   void on_tick(uint32_t) override {
     const Phase phase = plugin_->current();
-    const bool busy = phase == Phase::LISTENING || phase == Phase::THINKING || phase == Phase::ANSWERING;
+    const bool busy = phase == Phase::PREPARING || phase == Phase::LISTENING ||
+                      phase == Phase::THINKING || phase == Phase::ANSWERING;
     const bool failed = plugin_->showing_failure();
     ui::set_text(icon_, ui::icon(plugin_->phase_icon()));
     ui::set_tone(icon_, plugin_->phase_tone(), theme::MUTED);
@@ -107,7 +108,8 @@ void VoiceAssist::setup() {
   add_bar_item("busy", [this]() {
     tessera::BarItem item;
     const bool fresh_failure = showing_failure();
-    if (busy() || phase_ == Phase::LISTENING || phase_ == Phase::THINKING || phase_ == Phase::ANSWERING || fresh_failure) {
+    if (busy() || phase_ == Phase::PREPARING || phase_ == Phase::LISTENING ||
+        phase_ == Phase::THINKING || phase_ == Phase::ANSWERING || fresh_failure) {
       item.shown = true;
       item.icon = phase_icon();
       item.tone = phase_tone();
@@ -204,6 +206,9 @@ void VoiceAssist::phase(Phase p) {
   if (stopping_ && (p == Phase::LISTENING || p == Phase::THINKING)) return;
   if (p == Phase::THINKING && !thinking_allowed_) return;
   if (p != Phase::THINKING) thinking_allowed_ = p == Phase::LISTENING;
+  // HA on_end closes the pipeline's thinking feeder, not necessarily native reply playback.
+  // Keep the current busy visual until loop() observes native idle.
+  if (p == Phase::IDLE && assistant_ != nullptr && assistant_->is_running()) return;
   // A failure stays visible after the pipeline ends.
   if (p != Phase::IDLE || phase_ != Phase::FAILED) phase_ = p;
   if (p == Phase::LISTENING) {
@@ -283,7 +288,8 @@ void VoiceAssist::begin_request_(const std::string &word) {
   request_word_ = word;
   request_ = Request::STOPPING_WAKE;
   stopping_ = false;
-  phase_ = Phase::LISTENING;
+  thinking_allowed_ = false;
+  phase_ = Phase::PREPARING;
   heard_.clear();
   answer_.clear();
   sync_wake();
@@ -315,7 +321,6 @@ void VoiceAssist::advance_request_() {
   request_word_.clear();
   request_ = Request::NONE;
   assistant_->request_start(false, true);
-  thinking_allowed_ = assistant_->is_running();
 }
 
 void VoiceAssist::cancel_request_() {
@@ -368,6 +373,7 @@ std::string VoiceAssist::idle_line() const {
 
 uint32_t VoiceAssist::phase_icon() const {
   switch (phase_) {
+    case Phase::PREPARING: return ICON_ASSISTANT;
     case Phase::LISTENING: return ICON_LISTENING;
     case Phase::THINKING: return ICON_THINKING;
     case Phase::ANSWERING: return ICON_ANSWERING;
@@ -378,6 +384,7 @@ uint32_t VoiceAssist::phase_icon() const {
 
 tessera::Tone VoiceAssist::phase_tone() const {
   switch (phase_) {
+    case Phase::PREPARING: return tessera::Tone::BUSY;
     case Phase::LISTENING: return tessera::Tone::ACCENT;
     case Phase::THINKING: return tessera::Tone::BUSY;
     case Phase::ANSWERING: return tessera::Tone::ACCENT;
@@ -390,6 +397,7 @@ std::string VoiceAssist::phase_word() const {
   // A failure that is no longer fresh is quiet again.
   if (phase_ == Phase::FAILED && !reply_fresh()) return idle_line();
   switch (phase_) {
+    case Phase::PREPARING: return text("preparing");
     case Phase::LISTENING: return text("listening");
     case Phase::THINKING: return text("thinking");
     case Phase::ANSWERING: return text("answering");

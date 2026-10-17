@@ -41,6 +41,9 @@ silences it for the assistant as well.
 The wake sound finishes before recording starts. Wake detection pauses while a question or reply is active and
 resumes after the native assistant has finished, not merely when Home Assistant finishes generating its answer.
 A second tap during the wake sound cancels the pending question.
+The tile shows Preparing during startup and the wake sound, and Listening only after the native recording path starts.
+On a half-duplex board, speak after the sound has ended, not over it. The core releases completed playback without
+waiting for its silent output timeout; another active audio source still owns the speaker until it finishes.
 
 ## Manage wake models
 

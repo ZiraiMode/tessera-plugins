@@ -41,6 +41,9 @@ scherm, op een bord dat er een heeft, zet hem ook voor de assistent uit.
 Het wekgeluid is afgelopen voordat de opname begint. Wekdetectie pauzeert tijdens een vraag of antwoord en hervat
 nadat de native assistent klaar is, niet zodra Home Assistant het antwoord heeft gemaakt. Een tweede tik tijdens
 het wekgeluid annuleert de geplande vraag.
+De tegel toont Voorbereiden tijdens het starten en het wekgeluid, en Luisteren pas wanneer de native opname start.
+Spreek op een half-duplexbord nadat het geluid is afgelopen, niet erdoorheen. De core geeft afgeronde weergave vrij
+zonder op de stille uitvoertime-out te wachten; een andere actieve audiobron houdt de luidspreker tot die klaar is.
 
 ## Wekmodellen beheren
 

@@ -298,18 +298,27 @@ int main(){
  // Production SoundPlayer feeds partial writes; its final submission must not start capture.
  {
   Fixture f;assert(f.detector.is_running());f.plugin.wake("Алиса");assert(f.plugin.busy());
+  assert(f.plugin.current()==Phase::PREPARING&&f.plugin.phase_word()=="preparing");
   f.plugin.wake("Алиса");f.plugin.wake("Hey Jarvis");assert(!f.plugin.accepts_wake_word("Алиса"));
   f.await_beep();assert(f.assistant.starts==0&&f.output.finishes==1&&f.output.buffered==6);
+  assert(f.plugin.current()==Phase::PREPARING);
   f.pump(3,false);assert(f.assistant.starts==0); // All bytes accepted, still physically draining.
+  assert(f.plugin.current()==Phase::PREPARING);
   f.tick();assert(f.assistant.starts==1&&f.assistant.wake_word=="Алиса");
+  assert(f.plugin.current()==Phase::PREPARING); // Native STARTING is not microphone readiness.
+  f.plugin.phase(Phase::THINKING);assert(f.plugin.current()==Phase::PREPARING);
   assert(event("wake-stopped")<event("samples"));assert(event("samples")<event("finish"));
   assert(event("finish")<event("speaker-stopped"));assert(event("speaker-stopped")<event("capture"));
   int plays=f.output.plays;f.plugin.phase(Phase::LISTENING);f.pump(8);
+  assert(f.plugin.current()==Phase::LISTENING&&f.plugin.phase_word()=="listening");
   assert(f.output.plays==plays&&f.assistant.starts==1&&!f.detector.is_running());
  }
  // Sound off adds no speaker work, and a manual request clears the native wake-word field.
  {
-  Fixture f(false);f.assistant.wake_word="previous wake";f.plugin.ask();f.await_start();
+  Fixture f(false);f.assistant.wake_word="previous wake";f.plugin.ask();
+  assert(f.plugin.current()==Phase::PREPARING);f.await_start();
+  assert(f.plugin.current()==Phase::PREPARING);
+  f.plugin.phase(Phase::LISTENING);assert(f.plugin.current()==Phase::LISTENING);
   assert(f.assistant.wake_word.empty()&&f.output.plays==0&&f.output.finishes==0);
   f.assistant.running=false;f.pump(5);assert(f.detector.is_running());
   f.plugin.wake("Алиса");f.await_start();assert(f.assistant.starts==2&&f.assistant.wake_word=="Алиса");
@@ -329,13 +338,17 @@ int main(){
   if(reason==4)f.plugin.before_update();
   if(reason==5)f.assistant.client=nullptr; // Also rechecked without relying on YAML delivery.
   f.pump(30);assert(f.assistant.starts==0&&!f.plugin.busy()&&f.detector.redundant_starts==0);
+  assert(f.plugin.current()==Phase::IDLE);
   if(reason==1||reason==2||reason==4||reason==5)assert(!f.detector.is_running()&&!f.detector.pending_start);
  }
  // Model/switch changes only cancel wake-origin requests; tap remains available.
  {
   Fixture f;f.plugin.ask();f.await_beep();f.selection.make_call().set_index(1).perform();
+  assert(f.plugin.current()==Phase::PREPARING&&f.plugin.phase_word()=="preparing");
   f.wake_on.state=false;f.plugin.sync_wake();f.await_start();
   assert(f.assistant.wake_word.empty()&&f.assistant.starts==1);
+  assert(f.plugin.current()==Phase::PREPARING);
+  f.plugin.phase(Phase::LISTENING);assert(f.plugin.current()==Phase::LISTENING);
  }
  // Changing model identity cancels even when the two native wake phrases happen to be identical.
  {
@@ -356,13 +369,17 @@ int main(){
   f.plugin.phase(Phase::THINKING);f.pump(2,false);assert(f.output.submitted>0);
   int plays=f.output.plays;f.plugin.answer("response");assert(f.output.finishes==1);
   f.plugin.phase(Phase::IDLE);f.pump(5,false);
+  assert(f.plugin.current()==Phase::ANSWERING&&f.plugin.phase_word()=="answering");
   f.plugin.phase(Phase::THINKING); // A late VAD event cannot reopen the completed pipeline's feeder.
   assert(f.plugin.busy()&&!f.detector.is_running()&&f.output.plays==plays);
+  assert(f.plugin.current()==Phase::ANSWERING&&f.plugin.reply()=="response");
   f.pump(5);assert(!f.detector.is_running()); // Local sound idle does not imply native idle.
+  assert(f.plugin.current()==Phase::ANSWERING); // Still native playback, not the idle wake phrase.
   f.plugin.phase(Phase::LISTENING);f.pump(3); // Native continues directly into another capture.
   assert(f.assistant.starts==1&&!f.detector.is_running()&&f.plugin.busy());
   f.plugin.phase(Phase::IDLE);f.assistant.running=false;f.pump(6);
   assert(f.detector.is_running()&&f.detector.redundant_starts==0);
+  assert(f.plugin.current()==Phase::IDLE);
  }
  // Failure, cancel, and no-TTS "nevermind": all stop the thinking feeder and recover repeatedly.
  {
@@ -377,24 +394,27 @@ int main(){
     f.plugin.ask();assert(f.assistant.stop_requested);
     f.plugin.phase(Phase::THINKING); // Deferred VAD callback must not restart a cancelled feeder.
    }
-   if(outcome%3==2)f.plugin.phase(Phase::IDLE);
+   if(outcome%3==2){f.plugin.phase(Phase::IDLE);assert(f.plugin.current()==Phase::THINKING);}
    f.plugin.phase(Phase::THINKING); // Failure/end are also terminal until the next actual listening turn.
    f.pump(5);assert(f.output.plays==plays&&!f.detector.is_running());
    f.assistant.running=false;f.pump(6);
    assert(f.detector.is_running()&&!f.output.running&&f.detector.redundant_starts==0);
+   assert(f.plugin.current()==(outcome%3==0?Phase::FAILED:Phase::IDLE));
    assert(f.assistant.starts==outcome+1);
   }
  }
  // Firmware update cancellation also holds wake inference off after an active request becomes idle.
  {
-  Fixture f(false);f.plugin.ask();f.await_start();f.plugin.phase(Phase::THINKING);f.pump(2,false);
+  Fixture f(false);f.plugin.ask();f.await_start();f.plugin.phase(Phase::LISTENING);
+  f.plugin.phase(Phase::THINKING);f.pump(2,false);
   f.plugin.before_update();int plays=f.output.plays;assert(f.assistant.stop_requested);
   f.plugin.phase(Phase::THINKING);f.assistant.running=false;f.pump(10);
   assert(f.output.plays==plays&&!f.detector.is_running()&&!f.detector.pending_start&&!f.plugin.busy());
  }
  // Native idle without any HA end callback is also enough to stop thinking and restore wake.
  {
-  Fixture f(false);f.plugin.ask();f.await_start();f.plugin.phase(Phase::THINKING);f.pump(2,false);
+  Fixture f(false);f.plugin.ask();f.await_start();f.plugin.phase(Phase::LISTENING);
+  f.plugin.phase(Phase::THINKING);f.pump(2,false);
   int plays=f.output.plays;f.assistant.running=false;f.pump(8);
   assert(f.output.plays==plays&&f.detector.is_running()&&f.plugin.current()==Phase::IDLE);
  }

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.6 - 2026-10-17
+- Show Preparing during the wake sound and native startup, and Listening only when recording actually starts.
+- Keep the reply phase visible until native playback finishes instead of treating pipeline end as ready.
+
 ## 0.2.5 - 2026-10-17
 - Finish the wake sound before recording, for both taps and wake phrases, and cancel pending starts safely.
 - Pause wake detection through the native request and spoken reply, then resume without toggling Wake word.

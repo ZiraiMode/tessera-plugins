@@ -1,5 +1,9 @@
 # Wijzigingen
 
+## 0.2.6 - 2026-10-17
+- Toon Voorbereiden tijdens het wekgeluid en native opstarten, en Luisteren pas wanneer de opname werkelijk start.
+- Houd de antwoordfase zichtbaar tot de native weergave klaar is, in plaats van het pijplijneinde als gereed te zien.
+
 ## 0.2.5 - 2026-10-17
 - Rond het wekgeluid af voor de opname, na een tik of wekzin, en annuleer geplande starts veilig.
 - Pauzeer wekdetectie tijdens de native vraag en het gesproken antwoord; hervat zonder Wekwoord om te schakelen.

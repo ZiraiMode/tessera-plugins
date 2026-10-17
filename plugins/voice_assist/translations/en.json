@@ -4,6 +4,7 @@
  },
  "screen": {
   "name": "Voice assistant",
+  "preparing": "Preparing…",
   "listening": "Listening…",
   "thinking": "Thinking…",
   "answering": "Answering",

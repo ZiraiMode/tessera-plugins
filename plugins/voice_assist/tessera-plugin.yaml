@@ -5,7 +5,7 @@
 # sound while Assist thinks (components/voice_assist/sounds). It needs a microphone, a speaker and a media player, which
 # a board brings (features/audio.yaml) or a plugin.
 id: voice_assist
-version: 0.2.3
+version: 0.2.4
 api: "0.8"
 icon: robot
 maintainer: MaxGramser
@@ -36,3 +36,23 @@ settings:
   - { key: wake_phrase, label: setting_wake_phrase, hint: setting_wake_phrase_hint }
   - { key: wake_sound, label: setting_wake_sound, hint: setting_wake_sound_hint }
   - { key: thinking_sound, label: setting_thinking_sound, hint: setting_thinking_sound_hint }
+
+# Catalogue entries are optional presets, not installed binaries.
+build_settings:
+  - id: wake_models
+    kind: micro_wake_word_models
+    label: build_wake_models
+    hint: build_wake_models_hint
+    target: va_wake
+    feature_step_size: 10
+    legacy_installed: [va_okay_nabu, va_hey_jarvis, va_hey_mycroft]
+    catalogue:
+      - id: va_okay_nabu
+        label: model_okay_nabu
+        url: https://raw.githubusercontent.com/esphome/micro-wake-word-models/40ff33f57f8fc6ad71a75ef085abbf742495b225/models/v2/okay_nabu.json
+      - id: va_hey_jarvis
+        label: model_hey_jarvis
+        url: https://raw.githubusercontent.com/esphome/micro-wake-word-models/40ff33f57f8fc6ad71a75ef085abbf742495b225/models/v2/hey_jarvis.json
+      - id: va_hey_mycroft
+        label: model_hey_mycroft
+        url: https://raw.githubusercontent.com/esphome/micro-wake-word-models/40ff33f57f8fc6ad71a75ef085abbf742495b225/models/v2/hey_mycroft.json

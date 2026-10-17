@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.4 - 2026-10-17
+- GUI-managed compatible microWakeWord models, optional catalogue presets and public JSON URLs. First installation
+  requires an explicit choice; later an empty list allows manual-only activation.
+- Wake phrase derives real names from installed models and preserves selection by stable model ID. Removal and
+  corrupt preferences fail closed; historical stock selections migrate without depending on the new list order.
+- One authoritative Wake phrase select gates detection on a subscribed Assist client; manual Ask remains independent.
+- Add only needed model-name glyphs to existing fonts, with an on-screen ASCII ID fallback for unavailable characters.
+
 ## 0.2.3 - 2026-10-10
 - A new wake sound.
 

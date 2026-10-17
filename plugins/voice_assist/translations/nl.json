@@ -15,7 +15,8 @@
   "wake_phrase": "Wekzin",
   "ask": "Nu vragen",
   "wake_sound": "Wekgeluid",
-  "thinking_sound": "Denkgeluid"
+  "thinking_sound": "Denkgeluid",
+  "manual_only": "Alleen handmatig activeren"
  },
  "app": {
   "name": "Spraakassistent",
@@ -31,6 +32,11 @@
   "setting_wake_sound": "Wekgeluid",
   "setting_wake_sound_hint": "Een kort geluid als het scherm begint te luisteren, na de wekzin of een tik.",
   "setting_thinking_sound": "Denkgeluid",
-  "setting_thinking_sound_hint": "Een zacht geluid, steeds opnieuw, zolang Home Assistant het antwoord bedenkt."
+  "setting_thinking_sound_hint": "Een zacht geluid, steeds opnieuw, zolang Home Assistant het antwoord bedenkt.",
+  "build_wake_models": "Wekmodellen",
+  "build_wake_models_hint": "Kies minstens één model voor de eerste installatie. Voeg optionele catalogusmodellen of een openbare compatibele microWakeWord-JSON-URL toe en werk het scherm één keer bij. Later kun je alle modellen verwijderen voor alleen handmatige activering.",
+  "model_okay_nabu": "Okay Nabu",
+  "model_hey_jarvis": "Hey Jarvis",
+  "model_hey_mycroft": "Hey Mycroft"
  }
 }

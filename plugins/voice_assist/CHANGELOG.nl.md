@@ -1,5 +1,13 @@
 # Wijzigingen
 
+## 0.2.4 - 2026-10-17
+- Compatibele microWakeWord-modellen beheren via de GUI, met optionele catalogusmodellen en openbare JSON-URL's.
+  De eerste installatie vereist een eigen keuze; later kan een lege lijst alleen handmatige activering gebruiken.
+- Wekzin gebruikt echte modelnamen en bewaart de keuze op stabiel model-ID. Verwijderde modellen en beschadigde
+  voorkeuren activeren niets; bestaande stockkeuzes migreren onafhankelijk van de nieuwe lijstvolgorde.
+- Eén Wekzin-selectie beheert detectie met een aangemelde Assist-client; Nu vragen blijft onafhankelijk werken.
+- Alleen benodigde modelnaamtekens worden aan bestaande fonts toegevoegd, met een ASCII-ID als schermfallback.
+
 ## 0.2.3 - 2026-10-10
 - Een nieuw geluid voor wakker worden.
 

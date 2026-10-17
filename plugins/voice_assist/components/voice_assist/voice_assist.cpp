@@ -1,6 +1,5 @@
 #include "voice_assist.h"
 
-#include "esphome/components/api/api_server.h"
 #include "esphome/core/hal.h"
 
 namespace esphome::voice_assist {
@@ -116,24 +115,29 @@ void VoiceAssist::setup() {
     }
     return item;
   });
+  if (wake_phrase_ != nullptr) {
+    wake_phrase_->add_on_state_callback([this](size_t) {
+      tessera::refresh();
+      sync_wake();
+    });
+  }
+  setup_complete_ = true;
+  sync_wake();
 }
 
-void VoiceAssist::on_ready() {
-  // The phrase Wake phrase kept over the restart listens; the others rest.
-  auto index = wake_phrase_ != nullptr ? wake_phrase_->active_index() : optional<size_t>{};
-  choose_phrase(index.has_value() ? *index : 0);
-}
 
 bool VoiceAssist::settings(tessera::SettingsPage &page) {
   page.icon = "\U000F06A9";
   page.toggle(text("wake_word"), [this] { return wake_word_on_ != nullptr && wake_word_on_->state; },
               [this](bool on) { on ? wake_word_on_->turn_on() : wake_word_on_->turn_off(); });
-  if (wake_phrase_ != nullptr) {
+  if (wake_phrase_ != nullptr && wake_phrase_->size() != 0) {
     std::vector<std::string> options;
-    for (size_t i = 0; i < wake_phrase_->size(); ++i) options.emplace_back(wake_phrase_->option_at(i));
+    for (size_t i = 0; i < wake_phrase_->size(); ++i) options.emplace_back(wake_phrase_->screen_label_at(i));
     page.choice(text("wake_phrase"), options,
-                [this] { auto index = wake_phrase_->active_index(); return index.has_value() ? (int) *index : 0; },
+                [this] { auto index = wake_phrase_->active_index(); return index.has_value() ? (int) *index : -1; },
                 [this](int index) { wake_phrase_->make_call().set_index((size_t) index).perform(); });
+  } else {
+    page.info(text("wake_phrase"), [this] { return std::string(text("manual_only")); });
   }
   page.toggle(text("wake_sound"), [this] { return is_on(wake_sound_on_); },
               [this](bool on) { if (wake_sound_on_ != nullptr) on ? wake_sound_on_->turn_on() : wake_sound_on_->turn_off(); });
@@ -194,12 +198,20 @@ void VoiceAssist::failed(const std::string &code, const std::string &message) {
   tessera::refresh();
 }
 
-void VoiceAssist::choose_phrase(size_t index) {
-  for (size_t i = 0; i < phrases_.size(); ++i) {
-    if (i == index) phrases_[i]->enable();
-    else phrases_[i]->disable();
-  }
-  tessera::refresh();
+void VoiceAssist::sync_wake() {
+  if (!setup_complete_ || wake_word_ == nullptr) return;
+  if (assistant_ != nullptr && assistant_->get_api_connection() != nullptr &&
+      wake_word_on_ != nullptr && wake_word_on_->state &&
+      wake_phrase_ != nullptr && wake_phrase_->active_index().has_value())
+    wake_word_->start();
+  else
+    wake_word_->stop();
+}
+
+bool VoiceAssist::accepts_wake_word(const std::string &word) const {
+  return setup_complete_ && assistant_ != nullptr && assistant_->get_api_connection() != nullptr &&
+         wake_word_on_ != nullptr && wake_word_on_->state &&
+         wake_phrase_ != nullptr && wake_phrase_->accepts(word);
 }
 
 void VoiceAssist::ask() {
@@ -225,9 +237,12 @@ bool VoiceAssist::reply_fresh() const {
 }
 
 std::string VoiceAssist::idle_line() const {
-  if (api::global_api_server == nullptr || !api::global_api_server->is_connected()) return text("away");
-  if (wake_word_on_ != nullptr && wake_word_on_->state && wake_phrase_ != nullptr && wake_phrase_->has_state())
-    return tessera::fill(text("say_phrase"), "phrase", std::string(wake_phrase_->current_option()));
+  if (assistant_ == nullptr || assistant_->get_api_connection() == nullptr) return text("away");
+  if (wake_word_on_ != nullptr && wake_word_on_->state && wake_phrase_ != nullptr) {
+    auto index = wake_phrase_->active_index();
+    if (index.has_value())
+      return tessera::fill(text("say_phrase"), "phrase", std::string(wake_phrase_->screen_label_at(*index)));
+  }
   return text("tap_to_ask");
 }
 

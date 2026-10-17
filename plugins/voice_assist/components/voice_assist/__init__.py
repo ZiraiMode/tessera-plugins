@@ -19,7 +19,6 @@ CONF_ASSISTANT = "assistant"
 CONF_WAKE_WORD = "wake_word"
 CONF_WAKE_WORD_ON = "wake_word_on"
 CONF_WAKE_PHRASE = "wake_phrase"
-CONF_PHRASES = "phrases"
 CONF_SPEAKER = "speaker"
 CONF_WAKE_SOUND_ON = "wake_sound_on"
 CONF_THINKING_SOUND_ON = "thinking_sound_on"
@@ -35,6 +34,7 @@ def check_sounds(config):
 
 voice_assist_ns = cg.esphome_ns.namespace("voice_assist")
 VoiceAssist = voice_assist_ns.class_("VoiceAssist", cg.Component)
+WakePhraseSelect = voice_assist_ns.class_("WakePhraseSelect", select.Select, cg.Component)
 
 CONFIG_SCHEMA = cv.All(cv.Schema(
     {
@@ -42,9 +42,7 @@ CONFIG_SCHEMA = cv.All(cv.Schema(
         cv.Required(CONF_ASSISTANT): cv.use_id(voice_assistant.VoiceAssistant),
         cv.Required(CONF_WAKE_WORD): cv.use_id(micro_wake_word.MicroWakeWord),
         cv.Required(CONF_WAKE_WORD_ON): cv.use_id(switch.Switch),
-        cv.Required(CONF_WAKE_PHRASE): cv.use_id(select.Select),
-        # The wake word models in the order of Wake phrase's options.
-        cv.Required(CONF_PHRASES): cv.All(cv.ensure_list(cv.use_id(micro_wake_word.WakeWordModel)), cv.Length(min=1)),
+        cv.Required(CONF_WAKE_PHRASE): cv.use_id(WakePhraseSelect),
         # The speaker its sounds play on, and the two settings that turn them off.
         cv.Required(CONF_SPEAKER): cv.use_id(speaker.Speaker),
         cv.Required(CONF_WAKE_SOUND_ON): cv.use_id(switch.Switch),
@@ -61,8 +59,6 @@ async def to_code(config):
     cg.add(var.set_wake_word(await cg.get_variable(config[CONF_WAKE_WORD])))
     cg.add(var.set_wake_word_on(await cg.get_variable(config[CONF_WAKE_WORD_ON])))
     cg.add(var.set_wake_phrase(await cg.get_variable(config[CONF_WAKE_PHRASE])))
-    for phrase in config[CONF_PHRASES]:
-        cg.add(var.add_phrase(await cg.get_variable(phrase)))
     cg.add(var.set_speaker(await cg.get_variable(config[CONF_SPEAKER])))
     cg.add(var.set_wake_sound_on(await cg.get_variable(config[CONF_WAKE_SOUND_ON])))
     cg.add(var.set_thinking_sound_on(await cg.get_variable(config[CONF_THINKING_SOUND_ON])))

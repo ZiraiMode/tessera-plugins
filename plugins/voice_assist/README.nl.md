@@ -14,7 +14,9 @@ Assistant, in de ruimte die je het geeft.
 
 ## Instellen
 
-1. Open in Tessera **Plugins**, kies **Spraakassistent** en vink je schermen aan. Elk scherm bouwt één keer.
+1. Open in Tessera **Plugins**, kies **Spraakassistent** en vink je schermen aan. Voeg voor elke nieuwe installatie
+   zelf minstens één wekmodel toe: een optioneel catalogusmodel of een compatibele openbare microWakeWord-JSON-URL.
+   Er is niets vooraf geselecteerd. De installatie bouwt één keer met alleen je gekozen modellen.
 2. Open in Home Assistant het apparaat van het scherm (Instellingen, Apparaten) en kies bij **Assist-pijplijn** de
    pijplijn, als het niet de voorkeurspijplijn is.
 3. Zet de tegel **Assistent** op een pagina: hij zegt wat de assistent doet, en een tik stelt een vraag zonder wekzin,
@@ -27,7 +29,7 @@ Assistant, in de ruimte die je het geeft.
 Houd de bovenbalk vast, dan **Instellingen**, **Plugins**, **Spraakassistent**:
 
 - **Wekwoord**: of het scherm naar zijn wekzin luistert. Uit stelt een tik op de tegel nog steeds een vraag.
-- **Wekzin**: Okay Nabu, Hey Jarvis of Hey Mycroft.
+- **Wekzin**: wissel direct tussen de modellen die op dit scherm zijn geïnstalleerd, zonder opnieuw te bouwen.
 - **Wekgeluid**: een kort geluid als het scherm begint te luisteren, na de wekzin of een tik.
 - **Denkgeluid**: een zacht geluid, steeds opnieuw, zolang Home Assistant het antwoord bedenkt.
 - **Nu vragen**: stelt meteen een vraag.
@@ -35,6 +37,29 @@ Houd de bovenbalk vast, dan **Instellingen**, **Plugins**, **Spraakassistent**:
 De instellingen zijn ook entiteiten van het scherm in Home Assistant ("Wake word", "Wake phrase", "Wake sound",
 "Thinking sound"), en de editor toont ze in de details van de plugin op het tabblad Plugins van het scherm. De eigen schakelaar **Microfoon** van het
 scherm, op een bord dat er een heeft, zet hem ook voor de assistent uit.
+
+## Wekmodellen beheren
+
+Voeg in de bouwinstellingen van de plugin catalogusmodellen of openbare HTTPS-JSON-manifest-URL's toe, of verwijder
+modellen. Pas de lijst daarna toe om het scherm bij te werken. Conceptwijzigingen downloaden of installeren niets.
+Okay Nabu, Hey Jarvis (Engels) en Hey Mycroft zijn optionele catalogusmodellen, niet automatisch geïnstalleerd.
+Andere compatibele modellen, zoals Алиса, voeg je met hetzelfde URL-veld toe. Hun echte frontend-timing moet met
+de 10ms-eis van de plugin en VAD overeenkomen; metadata veranderen maakt een incompatibel model niet geschikt.
+
+Gewone upgrades bewaren de geïnstalleerde lijst. Na installatie mag je alle modellen verwijderen voor
+**Alleen handmatig activeren**; de tegel en **Nu vragen** blijven werken. Het losse ESPHome-pakket is ook standaard
+handmatig. Modelbestanden toevoegen of verwijderen vergt een firmware-update; een geïnstalleerde wekzin kiezen niet.
+
+De keuze wordt op model-ID bewaard, niet op positie. Verwijder je het gekozen model, dan blijft stemactivering uit
+tot je zelf een beschikbaar model kiest, ook als het oude model later terugkomt. De Wekwoord-schakelaar bewaart zijn
+voorkeur maar start niets zonder gekozen model en aangemelde Assist-client. Onbekende of beschadigde voorkeuren
+activeren niets. Bestaande stockkeuzes worden met hun historische ID's gemigreerd.
+
+Namen komen uit de echte manifesten; gelijke namen krijgen ID's. Ontbrekende ondersteunde tekens, zoals voor Алиса,
+worden aan de bestaande schermfonts toegevoegd. Niet-beschikbare tekens gebruiken alleen op het scherm een ASCII-ID;
+Home Assistant houdt de echte naam. Een firmwarebuild en echte herkenning blijven nodig om compatibiliteit te bewijzen;
+downloadlimieten garanderen niet dat de gekozen lijst op het bord past.
+
 
 ## De geluiden
 

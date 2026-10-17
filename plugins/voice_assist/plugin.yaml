@@ -2,24 +2,23 @@
 # pipeline for everything after it, and two settings. The microphone and the media player are the screen's
 # (ts_microphone, ts_media_player: the features this plugin needs), so nothing here owns a bus or a pin.
 
-# The wake words, all three on the screen; Wake phrase chooses the one that listens.
+# Managed installs supply only the explicitly chosen models through Tessera's sidecar.
 micro_wake_word:
   id: va_wake
   microphone:
     microphone: ts_microphone
     channels: 0
   stop_after_detection: false
-  models:
-    - model: okay_nabu
-      id: va_okay_nabu
-    - model: hey_jarvis
-      id: va_hey_jarvis
-    - model: hey_mycroft
-      id: va_hey_mycroft
+  models: []
   vad:
+    model: https://raw.githubusercontent.com/esphome/micro-wake-word-models/40ff33f57f8fc6ad71a75ef085abbf742495b225/models/v2/vad.json
   on_wake_word_detected:
-    - voice_assistant.start:
-        wake_word: !lambda return wake_word;
+    - if:
+        condition:
+          lambda: 'return id(va_plugin).accepts_wake_word(wake_word);'
+        then:
+          - voice_assistant.start:
+              wake_word: !lambda return wake_word;
 
 # Home Assistant's Assist pipeline: what the screen hears goes to Home Assistant, the answer comes back on the screen's
 # media player, which ducks music for it.
@@ -29,17 +28,12 @@ voice_assistant:
     microphone: ts_microphone
     channels: 0
   media_player: ts_media_player
-  micro_wake_word: va_wake
   use_wake_word: false
   noise_suppression_level: 2
   auto_gain: 31dBFS
   volume_multiplier: 2.0
   on_client_connected:
-    - if:
-        condition:
-          switch.is_on: va_wake_word
-        then:
-          - lambda: 'id(va_wake)->start();'
+    - lambda: 'id(va_plugin).sync_wake();'
   on_client_disconnected:
     - lambda: 'id(va_assistant)->request_stop(); id(va_wake)->stop();'
   on_listening:
@@ -65,13 +59,9 @@ switch:
     restore_mode: RESTORE_DEFAULT_ON
     entity_category: config
     on_turn_on:
-      - if:
-          condition:
-            api.connected:
-          then:
-            - lambda: 'id(va_wake)->start();'
+      - lambda: 'id(va_plugin).sync_wake();'
     on_turn_off:
-      - lambda: 'id(va_wake)->stop();'
+      - lambda: 'id(va_plugin).sync_wake();'
   # Its two sounds on the screen's speaker: when it starts to listen, and a plop again and again while Assist thinks.
   - platform: template
     id: va_wake_sound
@@ -89,17 +79,12 @@ switch:
     entity_category: config
 
 select:
-  - platform: template
+  - platform: voice_assist
     id: va_wake_phrase
     name: "Wake phrase"
     icon: mdi:chat-processing
-    optimistic: true
-    restore_value: true
-    options: ["Okay Nabu", "Hey Jarvis", "Hey Mycroft"]
-    initial_option: "Okay Nabu"
+    micro_wake_word_id: va_wake
     entity_category: config
-    on_value:
-      - lambda: 'id(va_plugin).choose_phrase(i);'
 
 voice_assist:
   id: va_plugin
@@ -107,7 +92,6 @@ voice_assist:
   wake_word: va_wake
   wake_word_on: va_wake_word
   wake_phrase: va_wake_phrase
-  phrases: [va_okay_nabu, va_hey_jarvis, va_hey_mycroft]
   speaker: ts_speaker
   wake_sound_on: va_wake_sound
   thinking_sound_on: va_thinking_sound

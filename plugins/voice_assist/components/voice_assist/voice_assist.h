@@ -5,7 +5,7 @@
 
 #include "esphome/core/component.h"
 #include "esphome/components/micro_wake_word/micro_wake_word.h"
-#include "esphome/components/select/select.h"
+#include "wake_phrase_select.h"
 #include "esphome/components/switch/switch.h"
 #include "esphome/components/voice_assistant/voice_assistant.h"
 #include "esphome/components/smart_display/plugin_api.h"
@@ -24,15 +24,13 @@ class VoiceAssist : public Component, public tessera::Plugin {
   void setup() override;
   void loop() override;
   float get_setup_priority() const override { return setup_priority::LATE; }
-  void on_ready() override;
   bool settings(tessera::SettingsPage &page) override;
   void before_update() override { stop(); }
 
   void set_assistant(voice_assistant::VoiceAssistant *a) { assistant_ = a; }
   void set_wake_word(micro_wake_word::MicroWakeWord *w) { wake_word_ = w; }
   void set_wake_word_on(switch_::Switch *s) { wake_word_on_ = s; }
-  void set_wake_phrase(select::Select *s) { wake_phrase_ = s; }
-  void add_phrase(micro_wake_word::WakeWordModel *m) { phrases_.push_back(m); }
+  void set_wake_phrase(WakePhraseSelect *s) { wake_phrase_ = s; }
   void set_speaker(speaker::Speaker *s) { sounds_.set_speaker(s); }
   void set_wake_sound_on(switch_::Switch *s) { wake_sound_on_ = s; }
   void set_thinking_sound_on(switch_::Switch *s) { thinking_sound_on_ = s; }
@@ -44,8 +42,8 @@ class VoiceAssist : public Component, public tessera::Plugin {
   void heard(const std::string &text);
   void answer(const std::string &text);
   void failed(const std::string &code, const std::string &message);
-  // Wake phrase chose its option `index`: that model listens, the others rest.
-  void choose_phrase(size_t index);
+  void sync_wake();
+  bool accepts_wake_word(const std::string &word) const;
 
   // A tap on the tile, or Ask on the settings page: ask now, or stop what runs.
   void ask();
@@ -70,8 +68,8 @@ class VoiceAssist : public Component, public tessera::Plugin {
   voice_assistant::VoiceAssistant *assistant_{};
   micro_wake_word::MicroWakeWord *wake_word_{};
   switch_::Switch *wake_word_on_{};
-  select::Select *wake_phrase_{};
-  std::vector<micro_wake_word::WakeWordModel *> phrases_;
+  WakePhraseSelect *wake_phrase_{};
+  bool setup_complete_{false};
   switch_::Switch *wake_sound_on_{}, *thinking_sound_on_{};
   tessera::Sound wake_sound_, thinking_sound_;
   tessera::SoundPlayer sounds_;

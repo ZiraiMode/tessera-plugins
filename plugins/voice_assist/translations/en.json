@@ -15,7 +15,8 @@
   "wake_phrase": "Wake phrase",
   "ask": "Ask now",
   "wake_sound": "Wake sound",
-  "thinking_sound": "Thinking sound"
+  "thinking_sound": "Thinking sound",
+  "manual_only": "Manual activation only"
  },
  "app": {
   "name": "Voice assistant",
@@ -31,6 +32,11 @@
   "setting_wake_sound": "Wake sound",
   "setting_wake_sound_hint": "A short sound when the screen starts to listen, after the wake phrase or a tap.",
   "setting_thinking_sound": "Thinking sound",
-  "setting_thinking_sound_hint": "A soft sound, again and again, while Home Assistant works out the answer."
+  "setting_thinking_sound_hint": "A soft sound, again and again, while Home Assistant works out the answer.",
+  "build_wake_models": "Wake models",
+  "build_wake_models_hint": "Choose at least one model for the first installation. Add optional catalogue presets or a public compatible microWakeWord JSON URL, then apply once to update the screen. Later, removing all models keeps manual activation.",
+  "model_okay_nabu": "Okay Nabu",
+  "model_hey_jarvis": "Hey Jarvis",
+  "model_hey_mycroft": "Hey Mycroft"
  }
 }

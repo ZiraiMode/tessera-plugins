@@ -14,7 +14,9 @@ voice satellite in Home Assistant, in the area you give it.
 
 ## Set up
 
-1. In Tessera, open **Plugins**, choose **Voice assistant** and tick your screens. Each screen builds once with it.
+1. In Tessera, open **Plugins**, choose **Voice assistant** and tick your screens. Explicitly add at least one wake
+   model for each new installation: an optional catalogue preset or a compatible public microWakeWord JSON URL.
+   No model is preselected. Install builds once with only your chosen set.
 2. In Home Assistant, open the screen's device (Settings, Devices) and choose its Assist pipeline under
    **Assist pipeline**, if it is not the preferred one.
 3. Put the tile **Assistant** on a page: it says what the assistant does, and a tap asks a question without the wake
@@ -27,7 +29,7 @@ voice satellite in Home Assistant, in the area you give it.
 Hold the top bar, then **Settings**, **Plugins**, **Voice assistant**:
 
 - **Wake word**: whether the screen listens for its wake phrase. Off, a tap on the tile still asks.
-- **Wake phrase**: Okay Nabu, Hey Jarvis or Hey Mycroft.
+- **Wake phrase**: switch immediately between the models installed on this screen; no rebuild is needed.
 - **Wake sound**: a short sound when the screen starts to listen, after the wake phrase or a tap.
 - **Thinking sound**: a soft sound, again and again, while Home Assistant works out the answer.
 - **Ask now**: asks a question at once.
@@ -35,6 +37,29 @@ Hold the top bar, then **Settings**, **Plugins**, **Voice assistant**:
 The settings are entities of the screen in Home Assistant too ("Wake word", "Wake phrase", "Wake sound", "Thinking
 sound"), and the editor shows them in the plugin's details on the screen's Plugins tab. The screen's own **Microphone** switch, on a board that has one,
 silences it for the assistant as well.
+
+## Manage wake models
+
+In the plugin's build settings, add or remove catalogue models or public HTTPS JSON manifest URLs, then choose
+**Apply and update screen**. Editing the draft never downloads or installs a model. Okay Nabu, Hey Jarvis (English)
+and Hey Mycroft are optional catalogue presets, not automatically installed models. Other compatible models, such
+as Алиса, use the same URL field. Their actual frontend timing must match the plugin's 10ms requirement and VAD;
+changing metadata does not make an incompatible model work.
+
+Ordinary upgrades preserve the installed set. After installation, removing all models is allowed: **Manual activation
+only** keeps the tile and **Ask now** usable. The standalone ESPHome package also defaults to manual-only.
+Adding/removing binaries requires a firmware update; choosing an already-installed Wake phrase does not.
+
+Selection is saved by model ID, not list position. If the selected model is removed, voice activation remains off
+until you explicitly choose an available model, even if the old model is later added again. The Wake word switch
+keeps its preference but cannot start detection without a selected model and a subscribed Assist client.
+Unknown/corrupt saved selection fails closed. Existing stock selection is migrated using historical IDs.
+
+Model names come from native manifests. Duplicate names include IDs. Supported label characters are added to the
+existing screen fonts (including Алиса); unavailable characters use an ASCII model ID on-screen only, while Home
+Assistant retains the genuine name. Firmware compilation and real recognition remain the compatibility proof;
+download limits do not guarantee the chosen model set fits the board.
+
 
 ## The sounds
 

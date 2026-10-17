@@ -242,6 +242,54 @@ without the value still works.
 A fetch may name an input as a placeholder, but the app fills in only secrets there (a secret with `scope: screen` is
 the one filled in for the tile's screen). A value a fetch needs that is not a secret is a tile's option.
 
+### Structured build settings: `build_settings`
+
+Build settings are per-screen lists, not scalar substitutions or live Home Assistant entity settings.
+The app currently supports one declaration per plugin, of kind `micro_wake_word_models`:
+
+```yaml
+build_settings:
+  - id: wake_models
+    kind: micro_wake_word_models
+    label: wake_models
+    hint: wake_models_hint
+    target: wake_detector
+    feature_step_size: 10
+    catalogue:
+      - id: example_wake
+        label: example_wake
+        url: https://models.example.org/wake.json
+```
+
+`id`, `kind`, `label`, `target` and `feature_step_size` are required. IDs follow the ordinary ID rule; labels and the
+optional hint are app text keys. `target` is the plugin's microWakeWord component ID. Timing is a whole number from
+1 to 30 milliseconds and must match the real model metadata, including the plugin's VAD. The plugin package leaves
+`models: []`; the app supplies the chosen native model entries. Two plugins on one screen cannot manage this singleton.
+
+`catalogue` is optional, at most 16 entries with unique IDs and URLs. Each entry requires `id`, `label` and `url`.
+Presets are available choices, not preselected or installed binaries. A person can also add arbitrary compatible
+public HTTPS microWakeWord JSON manifest URLs. URLs are at most 2048 characters, use a public DNS hostname and
+port 443 or no explicit port, and cannot contain credentials, fragments, backslashes or control characters.
+Private destinations and redirects are refused for both manifest and referenced binary. These explicit build-time
+downloads do not grant runtime network permissions to the plugin.
+
+Optional `legacy_installed` is a unique list of catalogue IDs already compiled by older versions. It preserves that
+historical set when a same-origin record has an old manifest without build settings; it never supplies fresh defaults.
+If the old set cannot be established, the app requires an explicit choice instead of guessing.
+
+First installation and origin switching require an explicit nonempty choice. Ordinary updates preserve the saved
+set; after installation, an explicit empty list allows manual-only activation. Draft edits do not download or build.
+Install or Apply and update screen resolves the whole list once and queues one firmware update. A live model selector
+can switch between compiled models without rebuilding. Keep its selection keyed by stable model ID, not list order.
+
+The app bounds JSON to 64 KiB, a model binary to 2 MiB, and a set to 16 models and 8 MiB. These limits do not promise
+that every set fits every board. Snapshots retain the exact source JSON and binary; screen-file exports include the
+referenced assets. Manual models, VAD or differing component IDs in owner YAML are reported as ownership conflicts,
+not silently overwritten.
+
+This is an app-side manifest extension, not a firmware plugin API change. It requires an app that understands
+`build_settings`; older apps refuse the unknown field.
+
 ### Optional parts: `parts`
 
 A part is an extra ESPHome file a person turns on per screen (large test tools, for example). At most 4.
@@ -452,18 +500,19 @@ whose name in ESPHome gives the key (0.6). A person who renames the entity in Ho
 a screen with a name other than you expected. Do not build on Home Assistant's `unique_id` or the YAML `id`: neither is
 what the key means. An entity Home Assistant's registry does not have is found by the end of its entity id.
 
-**Settings, inputs or parts?**
+**Settings, inputs, build settings or parts?**
 
 | What the person changes | Use | A change |
 |---|---|---|
 | A value the plugin reads while it runs: a volume, a switch, a word, a test | `settings` with an ESPHome entity | Takes effect at once |
 | A key or value the same for every screen, used by the app (a fetch's API key) | `inputs` with `scope: all` | Kept in the app; a secret never reaches the screen |
-| A value the build needs: a pin, a model to build in | `inputs` with `scope: screen` | Builds the screen again |
+| A scalar value the build needs, such as a pin | `inputs` with `scope: screen` | Builds the screen again |
+| A structured list of wake models to compile | `build_settings` with kind `micro_wake_word_models` | Applies the chosen set in one screen update |
 | An optional piece of firmware | `parts` | Builds the screen again |
 
 The editor shows all of them together in the plugin's details on the screen's Plugins tab: "On this screen" (the
-settings), "For every screen" (inputs with `scope: all`) and "When building" (inputs with `scope: screen` and the
-parts), with a **Save and build** key that lights up when something differs from what the screen was built with.
+settings), "For every screen" (inputs with `scope: all`) and "When building" (screen inputs, build settings and
+parts). Scalar inputs use **Save and build**; model lists use **Apply and update screen**.
 
 The app changes only an entity a plugin on that screen names here, of that screen's own device. A `status` is only
 shown, never set.
@@ -511,6 +560,9 @@ What each minor brought to the C++ is in [FIRMWARE_API.md](FIRMWARE_API.md), "Ve
 | Entities in `read_entities`, actions in `home_assistant_actions` | 32 each |
 | Home Assistant commands (`ha_commands`) | 8 |
 | Inputs | 8, each with up to 8 `domains` |
+| Structured build settings | 1; currently `micro_wake_word_models` only |
+| Wake models and catalogue presets | 16 each |
+| Wake model JSON / binary / selected set | 64 KiB / 2 MiB / 8 MiB |
 | Parts | 4 |
 | Tiles per plugin | 8 |
 | A tile's size | 9 x 9 cells |

@@ -13,7 +13,7 @@ micro_wake_word:
   vad:
     model: https://raw.githubusercontent.com/esphome/micro-wake-word-models/40ff33f57f8fc6ad71a75ef085abbf742495b225/models/v2/vad.json
   on_wake_word_detected:
-    # Tap and wake requests share shutdown -> optional drained beep -> native capture.
+    # Hardware policy chooses concurrent capture or safely serialized half-duplex.
     - lambda: 'id(va_plugin).wake(wake_word);'
 
 # Home Assistant's Assist pipeline: what the screen hears goes to Home Assistant, the answer comes back on the screen's
@@ -89,6 +89,7 @@ voice_assist:
   wake_word: va_wake
   wake_word_on: va_wake_word
   wake_phrase: va_wake_phrase
+  capture_during_playback: ${ (AUDIO_HALF_DUPLEX | default('true') | string | lower) != "true" }
   speaker: ts_speaker
   wake_sound_on: va_wake_sound
   thinking_sound_on: va_thinking_sound

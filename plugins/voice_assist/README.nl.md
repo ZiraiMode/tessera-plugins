@@ -38,12 +38,15 @@ De instellingen zijn ook entiteiten van het scherm in Home Assistant ("Wake word
 "Thinking sound"), en de editor toont ze in de details van de plugin op het tabblad Plugins van het scherm. De eigen schakelaar **Microfoon** van het
 scherm, op een bord dat er een heeft, zet hem ook voor de assistent uit.
 
-Het wekgeluid is afgelopen voordat de opname begint. Wekdetectie pauzeert tijdens een vraag of antwoord en hervat
-nadat de native assistent klaar is, niet zodra Home Assistant het antwoord heeft gemaakt. Een tweede tik tijdens
-het wekgeluid annuleert de geplande vraag.
-De tegel toont Voorbereiden tijdens het starten en het wekgeluid, en Luisteren pas wanneer de native opname start.
-Spreek op een half-duplexbord nadat het geluid is afgelopen, niet erdoorheen. De core geeft afgeronde weergave vrij
-zonder op de stille uitvoertime-out te wachten; een andere actieve audiobron houdt de luidspreker tot die klaar is.
+Op een full-duplexbord wordt opname direct na de wekzin of tik aangevraagd. Het wekgeluid begint wanneer Home Assistant
+meldt dat het luistert en houdt de opname niet tegen. Wekdetectie blijft tussen aanvragen draaien, zonder het model na
+elk antwoord opnieuw op te warmen; detecties tijdens een aanvraag starten geen nieuwe. Dit voegt geen echo-onderdrukking
+toe en verwijdert niet de eigen afkoelperiode van het model na een echte detectie.
+
+Op een half-duplexbord moet het wekgeluid eindigen voordat de opname begint. Wekdetectie pauzeert tijdens de aanvraag
+en het antwoord, en hervat nadat de native assistent klaar is. Spreek op die borden nadat het geluid is afgelopen.
+De tegel toont Voorbereiden tijdens het starten en Luisteren wanneer Home Assistant dat meldt. Een tweede tik stopt
+de aanvraag en annuleert een gepland wekgeluid. Microfoon dempen en de gekozen Wekzin blijven in beide modi gelden.
 
 ## Wekmodellen beheren
 

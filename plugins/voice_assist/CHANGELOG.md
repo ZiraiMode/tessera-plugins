@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.7 - 2026-10-17
+- On full-duplex boards, start capture immediately and play the optional wake cue only after listening starts,
+  without waiting for the cue to finish before recording speech.
+- Keep wake inference running between requests on full-duplex boards instead of reloading the model each turn.
+  Busy detections remain ignored; model thresholds, microphone mute and selected model identity are unchanged.
+- Preserve serialized sound and recording on half-duplex boards; cancel pending cues on stop and disconnect.
+
 ## 0.2.6 - 2026-10-17
 - Show Preparing during the wake sound and native startup, and Listening only when recording actually starts.
 - Keep the reply phase visible until native playback finishes instead of treating pipeline end as ready.

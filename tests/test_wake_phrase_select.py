@@ -276,7 +276,7 @@ struct Fixture {
  switch_::Switch wake_on,sound_on,thinking_on;
  VoiceAssist plugin;
  uint8_t beep_bytes[6]{},thinking_bytes[8]{};
- Fixture(bool sound=true,bool selected=true,bool settle=true) {
+ Fixture(bool sound=true,bool selected=true,bool settle=true,bool duplex=false) {
   storage.clear();global_preferences=&manager;now=1;
   if(!selected){WakeSelection none{};ESPPreferenceObject{42^0x56415001}.save(&none);}
   selection.set_models(models,2);selection.options={"Алиса","Hey Jarvis"};selection.setup();
@@ -284,6 +284,7 @@ struct Fixture {
   plugin.set_assistant(&assistant);plugin.set_wake_word(&detector);plugin.set_wake_word_on(&wake_on);
   plugin.set_wake_phrase(&selection);plugin.set_speaker(&output);plugin.set_wake_sound_on(&sound_on);
   plugin.set_thinking_sound_on(&thinking_on);
+  plugin.set_capture_during_playback(duplex);
   plugin.set_wake_sound(tessera::Sound{beep_bytes,sizeof(beep_bytes),16000,1});
   plugin.set_thinking_sound(tessera::Sound{thinking_bytes,sizeof(thinking_bytes),16000,1});
   plugin.setup();if(settle)pump(4);trace.clear();
@@ -445,6 +446,92 @@ int main(){
 '''
 
 
+DUPLEX_HARNESS = LIFECYCLE_HARNESS.split("int main(){", 1)[0] + r'''
+int main(){
+ // Capture starts without waiting for HA STT_START or the optional cue to drain.
+ {
+  Fixture f(true,true,true,true);const int detector_starts=f.detector.starts;
+  f.plugin.wake("Алиса");f.tick(false);
+  assert(f.assistant.starts==1&&f.assistant.running);
+  assert(f.assistant.starts==1&&f.assistant.wake_word=="Алиса"&&f.output.plays==0);
+  f.plugin.wake("Алиса");assert(f.assistant.starts==1);
+  f.plugin.phase(Phase::LISTENING);f.await_beep();
+  assert(f.output.buffered==6&&f.output.running&&f.assistant.running);
+  int plays=f.output.plays,finishes=f.output.finishes;
+  f.plugin.phase(Phase::LISTENING);f.pump(3,false);
+  assert(f.output.plays==plays&&f.output.finishes==finishes); // No duplicate cue or premature stop.
+  f.plugin.phase(Phase::THINKING);f.pump(3,false);
+  assert(f.output.submitted==6); // Thinking cannot replace the still-draining cue.
+  f.pump(10);assert(f.output.submitted>6);
+  f.plugin.answer("response");f.plugin.phase(Phase::IDLE);f.pump(8);
+  assert(f.detector.is_running()&&f.detector.starts==detector_starts&&f.detector.stops==0);
+  plays=f.output.plays;
+  f.plugin.phase(Phase::LISTENING);f.pump(8);
+  assert(f.output.plays==plays); // Native follow-up is not another user-requested cue.
+  f.plugin.phase(Phase::IDLE);f.assistant.running=false;f.pump(5);
+  assert(f.plugin.accepts_wake_word("Алиса"));
+  f.plugin.wake("Алиса");assert(f.assistant.starts==2);
+  f.plugin.phase(Phase::LISTENING);f.pump(10);
+  assert(f.output.plays>plays&&f.detector.starts==detector_starts&&f.detector.stops==0);
+ }
+ // Manual capture is equally immediate, clears the previous phrase, and works without a model.
+ for(bool selected:{false,true})for(bool sound:{false,true}){
+  Fixture f(sound,selected,true,true);f.assistant.wake_word="old";
+  f.plugin.ask();f.tick(false);
+  assert(f.assistant.starts==1&&f.assistant.running&&f.assistant.wake_word.empty());
+  f.plugin.phase(Phase::LISTENING);f.pump(10);
+  assert((f.output.submitted!=0)==sound&&f.detector.starts==(selected?1:0));
+ }
+ // No late cue after cancel, disconnect, error, model change (even same phrase), switch off,
+ // update, native idle, or HA end. Exercise both wake and tap pending cues.
+ for(bool manual:{false,true})for(int reason=0;reason<9;++reason){
+  Fixture f(true,true,true,true);
+  if(manual)f.plugin.ask();else f.plugin.wake("Алиса");
+  assert(f.assistant.starts==1);
+  if(reason==0)f.plugin.stop();
+  if(reason==1){f.assistant.client=nullptr;f.plugin.stop();}
+  if(reason==2)f.plugin.failed("error","failed");
+  if(reason==3){f.jarvis.word="Алиса";f.selection.make_call().set_index(1).perform();}
+  if(reason==4){f.wake_on.state=false;f.plugin.sync_wake();}
+  if(reason==5)f.plugin.before_update();
+  if(reason==6){f.assistant.running=false;f.plugin.loop();}
+  if(reason==7)f.plugin.phase(Phase::IDLE);
+  if(reason==8)f.assistant.client=nullptr; // Rechecked at LISTENING without a disconnect callback.
+  f.plugin.phase(Phase::LISTENING);f.pump(10);
+  // Turning wake activation off must not cancel an independent manual request/cue.
+  assert((f.output.submitted!=0)==(manual&&reason==4));
+  assert(f.assistant.starts==1);
+ }
+ // Cue emission is not truncated merely because the optional thinking sound is disabled.
+ {
+  Fixture f(true,true,true,true);f.thinking_on.state=false;f.plugin.wake("Алиса");
+  f.plugin.phase(Phase::LISTENING);f.tick(false);f.plugin.phase(Phase::THINKING);
+  f.await_beep();assert(f.output.submitted==6);f.pump(10);assert(f.output.submitted==6);
+ }
+ // An already-draining local sound never delays a new tap's capture. Its cue waits safely,
+ // and remains cancellable until that drain ends instead of overwriting the speaker input.
+ for(bool cancel:{false,true}){
+  Fixture f(true,true,true,true);f.plugin.wake("Алиса");
+  f.plugin.phase(Phase::LISTENING);f.await_beep();f.assistant.running=false;
+  f.plugin.ask();f.tick(false);
+  assert(f.assistant.running&&f.assistant.starts==2);
+  f.plugin.phase(Phase::LISTENING);f.pump(3,false);assert(f.output.submitted==6);
+  if(cancel)f.selection.make_call().set_index(1).perform();
+  f.pump(12);assert(f.output.submitted==(cancel?6:12));
+ }
+ // Explicit eligibility changes still fence a queued detector start, even in duplex mode.
+ {
+  Fixture f(true,true,false,true);assert(f.detector.pending_start);
+  f.wake_on.state=false;f.plugin.sync_wake();f.wake_on.state=true;f.plugin.sync_wake();
+  assert(!f.plugin.accepts_wake_word("Алиса"));f.plugin.wake("Алиса");assert(f.assistant.starts==0);
+  f.pump(10);assert(f.detector.is_running()&&f.detector.stops==1&&f.detector.starts==2);
+  f.plugin.wake("Алиса");assert(f.assistant.starts==1);
+  f.pump(5);assert(f.detector.starts==2&&f.detector.stops==1);
+ }
+}
+'''
+
+
 class ProductionFirmwareTests(unittest.TestCase):
     def compile_and_run(self, harness):
         with tempfile.TemporaryDirectory() as directory:
@@ -473,6 +560,9 @@ class ProductionFirmwareTests(unittest.TestCase):
 
     def test_production_request_audio_lifecycle(self):
         self.compile_and_run(LIFECYCLE_HARNESS)
+
+    def test_production_duplex_capture_lifecycle(self):
+        self.compile_and_run(DUPLEX_HARNESS)
 
 
 def load_select():

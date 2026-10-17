@@ -22,6 +22,7 @@ CONF_WAKE_PHRASE = "wake_phrase"
 CONF_SPEAKER = "speaker"
 CONF_WAKE_SOUND_ON = "wake_sound_on"
 CONF_THINKING_SOUND_ON = "thinking_sound_on"
+CONF_CAPTURE_DURING_PLAYBACK = "capture_during_playback"
 
 SOUNDS = Path(__file__).parent / "sounds"
 SOUND_NAMES = ("wake", "thinking")
@@ -43,6 +44,7 @@ CONFIG_SCHEMA = cv.All(cv.Schema(
         cv.Required(CONF_WAKE_WORD): cv.use_id(micro_wake_word.MicroWakeWord),
         cv.Required(CONF_WAKE_WORD_ON): cv.use_id(switch.Switch),
         cv.Required(CONF_WAKE_PHRASE): cv.use_id(WakePhraseSelect),
+        cv.Required(CONF_CAPTURE_DURING_PLAYBACK): cv.boolean,
         # The speaker its sounds play on, and the two settings that turn them off.
         cv.Required(CONF_SPEAKER): cv.use_id(speaker.Speaker),
         cv.Required(CONF_WAKE_SOUND_ON): cv.use_id(switch.Switch),
@@ -59,6 +61,7 @@ async def to_code(config):
     cg.add(var.set_wake_word(await cg.get_variable(config[CONF_WAKE_WORD])))
     cg.add(var.set_wake_word_on(await cg.get_variable(config[CONF_WAKE_WORD_ON])))
     cg.add(var.set_wake_phrase(await cg.get_variable(config[CONF_WAKE_PHRASE])))
+    cg.add(var.set_capture_during_playback(config[CONF_CAPTURE_DURING_PLAYBACK]))
     cg.add(var.set_speaker(await cg.get_variable(config[CONF_SPEAKER])))
     cg.add(var.set_wake_sound_on(await cg.get_variable(config[CONF_WAKE_SOUND_ON])))
     cg.add(var.set_thinking_sound_on(await cg.get_variable(config[CONF_THINKING_SOUND_ON])))

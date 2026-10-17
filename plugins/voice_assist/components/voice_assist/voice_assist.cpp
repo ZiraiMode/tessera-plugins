@@ -120,7 +120,7 @@ void VoiceAssist::setup() {
   if (wake_phrase_ != nullptr) {
     wake_phrase_->add_on_state_callback([this](size_t) {
       // Even two models with the same spoken phrase are distinct GUI choices.
-      if (request_ != Request::NONE && !request_word_.empty()) cancel_request_();
+      if (wake_cue_pending_ || (request_ != Request::NONE && !request_word_.empty())) cancel_request_();
       tessera::refresh();
       sync_wake();
     });
@@ -158,24 +158,28 @@ bool VoiceAssist::settings(tessera::SettingsPage &page) {
 void VoiceAssist::loop() {
   const bool running = assistant_ != nullptr && assistant_->is_running();
   if (!running && request_ == Request::NONE) {
+    wake_cue_pending_ = false;
+    request_word_.clear();
     stopping_ = false;
     thinking_allowed_ = false;
     stop_sound_();
     if (phase_ != Phase::IDLE && phase_ != Phase::FAILED) phase(Phase::IDLE);
   }
   // A native follow-up turn remains running: do not restart wake inference between turns.
-  if (running && !stopping_ && thinking_allowed_ && phase_ == Phase::THINKING &&
+  if (running && !stopping_ && thinking_allowed_ && !wake_cue_pending_ && phase_ == Phase::THINKING &&
       is_on(thinking_sound_on_) && !sound_active_) {
     sounds_.play(thinking_sound_);
     sound_active_ = sounds_.playing();
   }
-  if (phase_ == Phase::THINKING && !is_on(thinking_sound_on_)) stop_sound_();
+  if (phase_ == Phase::THINKING && !is_on(thinking_sound_on_) && !wake_cue_active_) stop_sound_();
   loop_sound_();
   sync_wake();
+  if (thinking_allowed_) play_wake_cue_();
   advance_request_();
 }
 
 void VoiceAssist::stop_sound_() {
+  wake_cue_active_ = false;
   sounds_.stop();
   if (sound_active_ && !sound_finishing_) {
     // Stop producing samples, but drain only our own speaker input, not the native response.
@@ -198,11 +202,28 @@ void VoiceAssist::loop_sound_() {
   if (speaker_->is_stopped()) {
     sound_active_ = false;
     sound_finishing_ = false;
+    wake_cue_active_ = false;
+  }
+}
+
+void VoiceAssist::play_wake_cue_() {
+  if (!wake_cue_pending_ || sound_active_) return;
+  wake_cue_pending_ = false;
+  request_word_.clear();
+  if (is_on(wake_sound_on_)) {
+    sounds_.play(wake_sound_);
+    sound_active_ = sounds_.playing();
+    wake_cue_active_ = sound_active_;
   }
 }
 
 void VoiceAssist::phase(Phase p) {
-  if (p != Phase::THINKING) stop_sound_();
+  // A duplicate listening event must not stop the cue it just started. Thinking waits for its drain.
+  if (p != Phase::THINKING && !(p == Phase::LISTENING && wake_cue_active_)) stop_sound_();
+  if (p == Phase::IDLE || p == Phase::FAILED) {
+    wake_cue_pending_ = false;
+    request_word_.clear();
+  }
   if (stopping_ && (p == Phase::LISTENING || p == Phase::THINKING)) return;
   if (p == Phase::THINKING && !thinking_allowed_) return;
   if (p != Phase::THINKING) thinking_allowed_ = p == Phase::LISTENING;
@@ -212,6 +233,8 @@ void VoiceAssist::phase(Phase p) {
   // A failure stays visible after the pipeline ends.
   if (p != Phase::IDLE || phase_ != Phase::FAILED) phase_ = p;
   if (p == Phase::LISTENING) {
+    sync_wake();  // Recheck subscription/selection before a deferred cue can become audible.
+    play_wake_cue_();
     heard_.clear();
     answer_.clear();
   }
@@ -226,6 +249,8 @@ void VoiceAssist::heard(const std::string &text) {
 void VoiceAssist::answer(const std::string &text) {
   // The answer is about to play on the same speaker: a plop that is still going stops here.
   stop_sound_();
+  wake_cue_pending_ = false;
+  request_word_.clear();
   thinking_allowed_ = false;
   answer_ = text;
   answered_at_ = millis();
@@ -249,7 +274,7 @@ bool VoiceAssist::wake_eligible_() const {
 }
 
 void VoiceAssist::sync_wake() {
-  if (request_ != Request::NONE &&
+  if ((request_ != Request::NONE || wake_cue_pending_) &&
       (assistant_ == nullptr || assistant_->get_api_connection() == nullptr ||
        (!request_word_.empty() && (!wake_eligible_() || !wake_phrase_->accepts(request_word_)))))
     cancel_request_();
@@ -257,7 +282,8 @@ void VoiceAssist::sync_wake() {
       (wake_word_ == nullptr || !wake_word_->is_running())) return;
   if (wake_word_ == nullptr) return;
 
-  const bool wanted = wake_eligible_() && !busy() && !sound_active_;
+  // Duplex boards keep the detector/frontend hot; acceptance, not inference, is gated while busy.
+  const bool wanted = wake_eligible_() && (capture_during_playback_ || (!busy() && !sound_active_));
   const bool running = wake_word_->is_running();
   if (running) wake_start_pending_ = false;
   if (!wanted && (running || wake_start_pending_)) wake_stop_pending_ = true;
@@ -294,6 +320,14 @@ void VoiceAssist::begin_request_(const std::string &word) {
   answer_.clear();
   sync_wake();
   tessera::refresh();
+  if (capture_during_playback_) {
+    // Native START_MICROPHONE starts its own source and 512 ms ring buffer immediately,
+    // independently of HA's later on_listening event and the speaker's queued samples.
+    assistant_->set_wake_word(request_word_);
+    request_ = Request::NONE;
+    wake_cue_pending_ = true;
+    assistant_->request_start(false, true);
+  }
 }
 
 void VoiceAssist::advance_request_() {
@@ -324,6 +358,7 @@ void VoiceAssist::advance_request_() {
 }
 
 void VoiceAssist::cancel_request_() {
+  wake_cue_pending_ = false;
   request_ = Request::NONE;
   request_word_.clear();
   thinking_allowed_ = false;

@@ -1,5 +1,12 @@
 # Wijzigingen
 
+## 0.2.7 - 2026-10-17
+- Start op full-duplexborden de opname direct en speel het optionele wekgeluid pas wanneer luisteren begint,
+  zonder de opname op het einde van dat geluid te laten wachten.
+- Houd wekdetectie op full-duplexborden actief tussen aanvragen in plaats van het model elke keer te herladen.
+  Detecties tijdens een aanvraag blijven genegeerd; modeldrempels, microfoon dempen en modelkeuze veranderen niet.
+- Behoud opeenvolgend geluid en opname op half-duplexborden; annuleer geplande geluiden bij stoppen en verbreken.
+
 ## 0.2.6 - 2026-10-17
 - Toon Voorbereiden tijdens het wekgeluid en native opstarten, en Luisteren pas wanneer de opname werkelijk start.
 - Houd de antwoordfase zichtbaar tot de native weergave klaar is, in plaats van het pijplijneinde als gereed te zien.

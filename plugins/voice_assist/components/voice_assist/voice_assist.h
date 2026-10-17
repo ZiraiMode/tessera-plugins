@@ -31,6 +31,7 @@ class VoiceAssist : public Component, public tessera::Plugin {
   void set_wake_word(micro_wake_word::MicroWakeWord *w) { wake_word_ = w; }
   void set_wake_word_on(switch_::Switch *s) { wake_word_on_ = s; }
   void set_wake_phrase(WakePhraseSelect *s) { wake_phrase_ = s; }
+  void set_capture_during_playback(bool enabled) { capture_during_playback_ = enabled; }
   void set_speaker(speaker::Speaker *s) { speaker_ = s; sounds_.set_speaker(s); }
   void set_wake_sound_on(switch_::Switch *s) { wake_sound_on_ = s; }
   void set_thinking_sound_on(switch_::Switch *s) { thinking_sound_on_ = s; }
@@ -81,6 +82,9 @@ class VoiceAssist : public Component, public tessera::Plugin {
   std::string request_word_;
   bool sound_active_{false}, sound_finishing_{false}, stopping_{false};
   bool thinking_allowed_{false};
+  bool capture_during_playback_{false};
+  // Armed only by an explicit wake/tap, never by native follow-up listening.
+  bool wake_cue_pending_{false}, wake_cue_active_{false};
   // Native start() is queued while still STOPPED; a stop there cannot cancel it.
   bool wake_start_pending_{false}, wake_stop_pending_{false}, wake_stop_sent_{false};
 
@@ -89,6 +93,7 @@ class VoiceAssist : public Component, public tessera::Plugin {
   void advance_request_();
   void cancel_request_();
   void stop_sound_();
+  void play_wake_cue_();
   void loop_sound_();
 
   Phase phase_{Phase::IDLE};
